@@ -112,21 +112,21 @@ async def main():
     webhook_url = f"https://{hostname}/{token}"
     logger.info(f"Настройка вебхука: {webhook_url}")
 
-    try:
-        await app.initialize()
-        logger.info("Приложение инициализировано")
-        await app.start()
-        logger.info("Приложение запущено")
-        await app.updater.start_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=token,
-            webhook_url=webhook_url
-        )
-        logger.info(f"Вебхук запущен на порту {port}")
-        await app.updater.run_forever()
-    except Exception as e:
-        logger.error(f"Ошибка при запуске: {e}")
+    await app.initialize()
+    logger.info("Приложение инициализировано")
+    await app.start()
+    logger.info("Приложение запущено")
+    await app.updater.start_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=token,
+        webhook_url=webhook_url
+    )
+    logger.info(f"Вебхук запущен на порту {port}")
+
+    # Бесконечный цикл не нужен, вебхук уже работает
+    while True:
+        await asyncio.sleep(3600)  # Спим 1 час, чтобы Render не завершал процесс
 
 if __name__ == "__main__":
     import asyncio
