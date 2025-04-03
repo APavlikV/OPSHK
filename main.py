@@ -88,9 +88,9 @@ async def main():
         print("Ошибка: RENDER_EXTERNAL_HOSTNAME не задан!")
         return
 
-    # Увеличиваем таймаут
-    request = HTTPXRequest(connection_pool_size=8, read_timeout=60, connect_timeout=60)
-    app = Application.builder().token(token).http_client(request).build()
+    # Настройка HTTPXRequest с увеличенным таймаутом
+    request = HTTPXRequest(read_timeout=60, connect_timeout=60)
+    app = Application.builder().token(token).request(request).build()
 
     # Регистрация обработчиков
     app.add_handler(CommandHandler("start", start))
@@ -98,7 +98,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(button))
 
     # Порт от Render
-    port = int(os.environ.get("PORT", 10000))  # Render обычно использует 10000
+    port = int(os.environ.get("PORT", 10000))
 
     try:
         await app.initialize()
