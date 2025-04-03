@@ -1,7 +1,8 @@
 import random
+import os
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-import os
+from telegram.request import HTTPXRequest
 
 # Ходы бота
 MOVES = [
@@ -77,27 +78,42 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Главная функция для вебхуков
 async def main():
-    # Токен бота из переменной окружения
     token = os.getenv("TELEGRAM_TOKEN")
-    app = Application.builder().token(token).build()
+    if not token:
+        print("Ошибка: TELEGRAM_TOKEN не задан!")
+        return
+
+    hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    if not hostname:
+        print("Ошибка: RENDER_EXTERNAL_HOSTNAME не задан!")
+        return
+
+    # Увеличиваем таймаут
+    request = HTTPXRequest(connection_pool_size=8, read_timeout=60, connect_timeout=60)
+    app = Application.builder().token(token).http_client(request).build()
 
     # Регистрация обработчиков
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
 
-    # Настройка вебхуков
-    port = int(os.environ.get("PORT", 8443))
-    await app.initialize()
-    await app.start()
-    await app.updater.start_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=token,
-        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{token}"
-    )
-    # Держим приложение запущенным
-    await app.updater.run_forever()
+    # Порт от Render
+    port = int(os.environ.get("PORT", 10000))  # Render обычно использует 10000
+
+    try:
+        await app.initialize()
+        await app.start()
+        webhook_url = f"https://{hostname}/{token}"
+        await app.updater.start_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=token,
+            webhook_url=webhook_url
+        )
+        print(f"Бот запущен на порту {port} с вебхуком {webhook_url}")
+        await app.updater.run_forever()
+    except Exception as e:
+        print(f"Ошибка при запуске: {e}")
 
 if __name__ == "__main__":
     import asyncio
