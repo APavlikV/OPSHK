@@ -17,24 +17,73 @@ MOVES = [
     ("ДЗ", "ТР"), ("ДЗ", "СС"), ("ДЗ", "ГДН")
 ]
 
-# Соответствие правильных ответов
-CORRECT_ANSWERS = {
-    ("СС", "ДЗ"): ["Аге уке", "Учи уке"],
-    ("СС", "ТР"): ["Учи уке"],
-    ("СС", "СС"): ["Учи уке"],
-    ("ТР", "ТР"): ["Сото уке"],
-    ("ТР", "СС"): ["Сото уке"],
-    ("ТР", "ДЗ"): ["Сото уке"],
-    ("ДЗ", "ТР"): ["Гедан барай"],
-    ("ДЗ", "СС"): ["Гедан барай"],
-    ("ДЗ", "ГДН"): ["Гедан барай"]
+# Соответствие защиты и контратаки
+DEFENSE_MOVES = {
+    "Аге уке": [("СС", "ДЗ")],
+    "Учи уке": [("СС", "ТР"), ("СС", "СС"), ("СС", "ДЗ")],
+    "Сото уке": [("ТР", "ТР"), ("ТР", "СС"), ("ТР", "ДЗ")],
+    "Гедан барай": [("ДЗ", "ТР"), ("ДЗ", "СС"), ("ДЗ", "ГДН")]
+}
+
+# Фразы для логов
+ATTACK_PHRASES = {
+    "control_success": {
+        "ГДН": "молниеносно провел контроль ниже пояса",
+        "СС": "молниеносно провел контроль в солнечное сплетение",
+        "ТР": "молниеносно провел контроль в трахею",
+        "ДЗ": "молниеносно провел контроль в голову"
+    },
+    "control_fail": {
+        "ГДН": "неуклюже попытался провести контроль ниже пояса",
+        "СС": "неуклюже попытался провести контроль в солнечное сплетение",
+        "ТР": "неуклюже попытался провести контроль в трахею",
+        "ДЗ": "неуклюже попытался провести контроль в голову"
+    },
+    "attack_success": {
+        "ГДН": "и не особо мешкая атаку ниже пояса",
+        "СС": "и не особо мешкая атаку в солнечное сплетение",
+        "ТР": "и не особо мешкая атаку в трахею",
+        "ДЗ": "и не особо мешкая атаку в голову"
+    },
+    "attack_fail": {
+        "ГДН": "и медленно нанёс атаку ниже пояса",
+        "СС": "и медленно нанёс атаку в солнечное сплетение",
+        "ТР": "и медленно нанёс атаку в трахею",
+        "ДЗ": "и медленно нанёс атаку в голову"
+    }
+}
+
+DEFENSE_PHRASES = {
+    "defense_success": {
+        "ГДН": "Вы не растерялись, закрывая область ниже пояса среагировали верно",
+        "СС": "Вы не растерялись, закрывая солнечное сплетение среагировали верно",
+        "ТР": "Вы не растерялись, закрывая трахею среагировали верно",
+        "ДЗ": "Вы не растерялись, закрывая голову среагировали верно"
+    },
+    "defense_fail": {
+        "ГДН": "Вы замешкались, закрывая область ниже пояса пропустили контроль",
+        "СС": "Вы замешкались, закрывая солнечное сплетение пропустили контроль",
+        "ТР": "Вы замешкались, закрывая трахею пропустили контроль",
+        "ДЗ": "Вы замешкались, закрывая голову пропустили контроль"
+    },
+    "counter_success": {
+        "Аге уке": "нанесли сокрушительный удар в голову, завершив контратаку сокрушительным Аге уке сломали атакующему руку",
+        "Учи уке": "нанесли сокрушительный удар в трахею, завершив контратаку мощным Учи уке оглушив противника",
+        "Сото уке": "нанесли сокрушительный удар в туловище, завершив контратаку точным Сото уке выбив дыхание",
+        "Гедан барай": "нанесли сокрушительный удар ниже пояса, завершив контратаку резким Гедан барай повалив противника"
+    },
+    "counter_fail": {
+        "Аге уке": "нанесли слабый удар в голову, завершив контратаку слабым Аге уке едва задев противника",
+        "Учи уке": "нанесли слабый удар в трахею, завершив контратаку посредственным Учи уке не впечатлив противника",
+        "Сото уке": "нанесли слабый удар в туловище, завершив контратаку слабым Сото уке слегка толкнув противника",
+        "Гедан барай": "нанесли слабый удар ниже пояса, завершив контратаку посредственным Гедан барай повиснув на атакующей руке как шашлык"
+    }
 }
 
 # Кастомная клавиатура
 def start_keyboard():
     return ReplyKeyboardMarkup([["Игра"]], resize_keyboard=True)
 
-# Главное меню
 def menu_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Учебный бой", callback_data="training_fight")],
@@ -43,14 +92,12 @@ def menu_keyboard():
         [InlineKeyboardButton("Памятка", callback_data="memo")]
     ])
 
-# Подменю для "Учебного боя"
 def training_mode_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Простой бой", callback_data="simple_fight")],
         [InlineKeyboardButton("Бой на время", callback_data="timed_fight")]
     ])
 
-# Инлайн-клавиатура для ответов
 def answer_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Аге уке", callback_data="Аге уке")],
@@ -62,7 +109,7 @@ def answer_keyboard():
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
-    await update.message.reply_text("Добро пожаловать!", reply_markup=start_keyboard())
+    await update.message.reply_text("Добро пожаловать в КАРАТЭ тотализатор!", reply_markup=start_keyboard())
 
 # Обработчик кнопки "Игра"
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -98,7 +145,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
                 message_id=message_id,
                 text="Время вышло! Вы проиграли."
             )
-            # Удаляем задачу только если она ещё существует
             if job in context.job_queue.jobs():
                 job.schedule_removal()
         except Exception as e:
@@ -119,21 +165,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
     elif query.data in ["simple_fight", "timed_fight"]:
-        # Создаём случайную последовательность всех атак
         fight_sequence = MOVES.copy()
         random.shuffle(fight_sequence)
         context.user_data["fight_sequence"] = fight_sequence
         context.user_data["current_step"] = 0
         context.user_data["correct_count"] = 0
         context.user_data["mode"] = query.data
+        context.user_data["fight_log"] = []  # Лог боя
 
-        # Показываем первый удар
         control, attack = fight_sequence[0]
-        text = f"Бой начался!\nШаг 1 из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
-        
+        text = f"Шаг 1 из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
-            # Запускаем таймер с обратным отсчётом
             context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -154,21 +197,43 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if sequence and step is not None:
             current_move = sequence[step]
-            correct = query.data in CORRECT_ANSWERS.get(current_move, [])
-            if correct:
+            control, attack = current_move
+            chosen_defense = query.data
+            valid_defenses = DEFENSE_MOVES.get(chosen_defense, [])
+            is_success = current_move in valid_defenses
+            
+            # Формируем короткий лог для текущего хода
+            short_log = f"Атака {step + 1}\nКонтроль: {control}\nАтака: {attack}\nЗащита и контратака: {chosen_defense}\n{'УСПЕХ' if is_success else 'ПОРАЖЕНИЕ'}"
+            await query.message.reply_text(short_log)
+            
+            # Формируем развёрнутый лог
+            control_success = random.choice([True, False])  # Случайный успех контроля атакующего
+            attack_success = random.choice([True, False])   # Случайный успех атаки
+            defense_success = is_success and control in [move[0] for move in valid_defenses]
+            counter_success = is_success
+            
+            attacker_name = "ОПШКА Вася"
+            defender_name = "Вы"
+            attack_text = f"{attacker_name} {'яростно атаковал' if attack_success else 'недолго думая ринулся в атаку'}: " \
+                          f"{ATTACK_PHRASES['control_success' if control_success else 'control_fail'][control]} " \
+                          f"{ATTACK_PHRASES['attack_success' if attack_success else 'attack_fail'][attack]} ⚔️ "
+            defense_text = f"{defender_name} " \
+                           f"{DEFENSE_PHRASES['defense_success' if defense_success else 'defense_fail'][control if defense_success else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))]} " \
+                           f"{DEFENSE_PHRASES['counter_success' if counter_success else 'counter_fail'][chosen_defense]}"
+            detailed_log = f"Атака {step + 1}\n{attack_text}{defense_text}"
+            context.user_data["fight_log"].append(detailed_log)
+            
+            if is_success:
                 context.user_data["correct_count"] += 1
             
-            # Переходим к следующему шагу
             step += 1
             context.user_data["current_step"] = step
             
             if step < len(sequence):
-                # Останавливаем текущий таймер, если есть
                 if mode == "timed_fight" and context.job_queue.jobs():
                     for job in context.job_queue.jobs():
                         job.schedule_removal()
                 
-                # Показываем следующий удар
                 control, attack = sequence[step]
                 text = f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
                 if mode == "timed_fight":
@@ -187,15 +252,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 await query.edit_message_text(text, reply_markup=answer_keyboard())
             else:
-                # Останавливаем таймер при завершении
                 if mode == "timed_fight" and context.job_queue.jobs():
                     for job in context.job_queue.jobs():
                         job.schedule_removal()
-                # Бой завершён
+                
                 correct_count = context.user_data["correct_count"]
                 total = len(MOVES)
-                result = f"Бой завершён!\nПравильных блоков: {correct_count} из {total}"
-                await query.edit_message_text(result)
+                full_log = "ЛОГ БОЯ\n" + "\n\n".join(context.user_data["fight_log"]) + \
+                           f"\n\nСтатистика боя: {correct_count} из {total} удача"
+                await query.message.reply_text(full_log)
+                await query.edit_message_text("Бой завершён!")
 
 # Главная функция
 async def main():
@@ -216,7 +282,6 @@ async def main():
     request = HTTPXRequest(read_timeout=60, connect_timeout=60)
     app = Application.builder().token(token).request(request).build()
 
-    # Регистрация обработчиков
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
