@@ -92,12 +92,17 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка обновления таймера: {e}")
 
     if remaining <= 0:
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text="Время вышло! Вы проиграли."
-        )
-        context.job.schedule_removal()  # Удаляем задачу
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text="Время вышло! Вы проиграли."
+            )
+            # Удаляем задачу только если она ещё существует
+            if job in context.job_queue.jobs():
+                job.schedule_removal()
+        except Exception as e:
+            logger.error(f"Ошибка при завершении таймера: {e}")
 
 # Обработчик callback’ов
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
