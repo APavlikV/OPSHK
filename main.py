@@ -1,7 +1,6 @@
 import random
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from telegram.ext import Updater, WebhookUpdate
 import os
 
 # Ходы бота
@@ -77,8 +76,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"Вы выбрали: {query.data}\n{result}")
 
 # Главная функция для вебхуков
-def main():
-    # Токен бота из переменной окружения (для безопасности)
+async def main():
+    # Токен бота из переменной окружения
     token = os.getenv("TELEGRAM_TOKEN")
     app = Application.builder().token(token).build()
 
@@ -89,12 +88,17 @@ def main():
 
     # Настройка вебхуков
     port = int(os.environ.get("PORT", 8443))
-    app.run_webhook(
+    await app.initialize()
+    await app.start()
+    await app.updater.start_webhook(
         listen="0.0.0.0",
         port=port,
         url_path=token,
         webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{token}"
     )
+    # Держим приложение запущенным
+    await app.updater.run_forever()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
