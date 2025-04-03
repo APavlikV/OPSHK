@@ -19,13 +19,13 @@ MOVES = [
 
 # Соответствие защиты и контратаки
 DEFENSE_MOVES = {
-    "Аге уке": {"defense": "СС", "counter": ["ДЗ", "ТР"]},
-    "Учи уке": {"defense": "СС", "counter": ["ДЗ", "ТР"]},
-    "Сото уке": {"defense": "ТР", "counter": ["ДЗ", "СС"]},
-    "Гедан барай": {"defense": "ДЗ", "counter": ["ТР", "СС", "ГДН"]}
+    "Аге уке": {"control": "СС", "counter": ["ДЗ", "ТР"], "attack_defense": ["ДЗ"]},
+    "Учи уке": {"control": "СС", "counter": ["ДЗ", "ТР"], "attack_defense": ["СС", "ТР", "ДЗ"]},
+    "Сото уке": {"control": "ТР", "counter": ["ДЗ", "СС"], "attack_defense": ["СС", "ТР", "ДЗ"]},
+    "Гедан барай": {"control": "ДЗ", "counter": ["ТР", "СС"], "attack_defense": ["СС", "ТР", "ГДН"]}
 }
 
-# Фразы для логов (5-10 вариантов)
+# Фразы для логов (5 вариантов)
 ATTACK_PHRASES = {
     "control_success": {
         "ГДН": ["молниеносно провел контроль ниже пояса ⚡", "стремительно захватил область ниже пояса ⚡", "точно зафиксировал ноги ⚡", "быстро сковал нижнюю часть ⚡", "уверенно перехватил пояс ⚡"],
@@ -136,7 +136,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id,
             message_id=message_id,
             text=text,
-            reply_markup=answer_keyboard(show_hint=True)  # Без подсказки в "Бое на время"
+            reply_markup=answer_keyboard(show_hint=True)
         )
     except Exception as e:
         logger.error(f"Ошибка обновления таймера: {e}")
@@ -177,30 +177,36 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["hint_count"] = 0
         context.user_data["mode"] = query.data
         context.user_data["fight_log"] = []
+        context.user_data["last_message_id"] = None
 
         control, attack = fight_sequence[0]
         text = f"Шаг 1 из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
+            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(show_hint=True))
             context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
                 first=0,
                 data={
                     "chat_id": query.message.chat_id,
-                    "message_id": query.message.message_id,
+                    "message_id": msg.message_id,
                     "remaining": 5,
                     "current_move": (control, attack),
                     "step": 1
                 }
             )
-        await query.edit_message_text(text, reply_markup=answer_keyboard(show_hint=(query.data == "timed_fight")))
+        else:
+            msg = await query.message.reply_text(text, reply_markup=answer_keyboard())
+        context.user_data["last_message_id"] = msg.message_id
+        await query.delete_message()
     elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
         sequence = context.user_data.get("fight_sequence")
         step = context.user_data.get("current_step")
         if sequence and step is not None:
             control, attack = sequence[step]
-            correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["defense"] and attack in data["counter"]), None)
+            correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["control"] and attack in data["attack_defense"]), None)
+            context.user_data["hint_count"] += 1
             await query.edit_message_text(
                 f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\nПодсказка: {correct_answer}",
                 reply_markup=answer_keyboard(show_hint=True)
@@ -215,11 +221,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             control, attack = current_move
             chosen_defense = query.data
             defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-            is_success = control == defense_data.get("defense") and attack in defense_data.get("counter", [])
-            control_success = control == defense_data.get("defense")
+            control_success = control == defense_data.get("control")
+            attack_success = attack in defense_data.get("attack_defense", [])
+            is_success = control_success and attack_success
             
             # Находим правильный ответ для подсказки
-            correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["defense"] and attack in data["counter"]), None)
+            correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["control"] and attack in data["attack_defense"]), None)
             
             # Формируем короткий лог для текущего хода
             short_log = f"Атака {step + 1}\nКонтроль: {control}\nАтака: {attack}\nЗащита и контратака: {chosen_defense}\n" \
@@ -235,7 +242,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             attack_text = f"{attacker_name} {'яростно атаковал' if attacker_attack_success else 'недолго думая ринулся в атаку'}: " \
                           f"{random.choice(ATTACK_PHRASES['control_success' if attacker_control_success else 'control_fail'][control])} " \
                           f"{random.choice(ATTACK_PHRASES['attack_success' if attacker_attack_success else 'attack_fail'][attack])} ⚔️ "
-            defense_text = f"{DEFENSE_PHRASES['defense_success' if control_success else 'defense_fail'][control if control_success else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))]} " \
+            defense_text = f"{random.choice(DEFENSE_PHRASES['defense_success' if control_success else 'defense_fail'][control if control_success else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))])} " \
                            f"{random.choice(DEFENSE_PHRASES['counter_success' if is_success else 'counter_fail'][chosen_defense])}"
             detailed_log = f"Атака {step + 1}\n{attack_text}{defense_text}"
             context.user_data["fight_log"].append(detailed_log)
@@ -257,19 +264,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text = f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
+                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(show_hint=True))
                     context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
                         first=0,
                         data={
                             "chat_id": query.message.chat_id,
-                            "message_id": query.message.message_id,
+                            "message_id": msg.message_id,
                             "remaining": 5,
                             "current_move": (control, attack),
                             "step": step + 1
                         }
                     )
-                await query.edit_message_text(text, reply_markup=answer_keyboard(show_hint=(mode == "timed_fight")))
+                else:
+                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard())
+                context.user_data["last_message_id"] = msg.message_id
+                await query.delete_message()
             else:
                 if mode == "timed_fight" and context.job_queue.jobs():
                     for job in context.job_queue.jobs():
@@ -282,7 +293,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 full_log = "ЛОГ БОЯ\n" + "\n\n".join(context.user_data["fight_log"]) + \
                            f"\n\nСтатистика боя:\nПравильных: {correct_count}, с подсказкой: {hint_count}, из {total}\n" \
                            f"Отбито {control_count} из {total} контролей\nПропущено {total - correct_count} атак"
-                await query.message.reply_text(full_log)
+                await query.message.reply_text(full_log, parse_mode="Markdown")
                 await query.edit_message_text("Бой завершён!")
 
 # Главная функция
