@@ -70,6 +70,35 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Приветствуем в нашем тотализаторе!\nВыберите режим:", 
                                     reply_markup=menu_keyboard())
 
+# Обновление таймера
+async def update_timer(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    chat_id = job.data["chat_id"]
+    message_id = job.data["message_id"]
+    remaining = job.data["remaining"] - 1
+    job.data["remaining"] = remaining
+
+    control, attack = job.data["current_move"]
+    text = f"Шаг {job.data['step']} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\nОсталось: {remaining} сек"
+    
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=answer_keyboard()
+        )
+    except Exception as e:
+        logger.error(f"Ошибка обновления таймера: {e}")
+
+    if remaining <= 0:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text="Время вышло! Вы проиграли."
+        )
+        context.job.schedule_removal()  # Удаляем задачу
+
 # Обработчик callback’ов
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -96,15 +125,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Показываем первый удар
         control, attack = fight_sequence[0]
         text = f"Бой начался!\nШаг 1 из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
-        if query.data == "timed_fight":
-            text += "\nУ вас 5 секунд на ответ!"
-            # Запускаем таймер, передаём chat_id и message_id через data
-            context.job_queue.run_once(
-                timeout_callback, 
-                5, 
-                data={"chat_id": query.message.chat_id, "message_id": query.message.message_id}
-            )
         
+        if query.data == "timed_fight":
+            text += "\nОсталось: 5 сек"
+            # Запускаем таймер с обратным отсчётом
+            context.job_queue.run_repeating(
+                update_timer,
+                interval=1,
+                first=0,
+                data={
+                    "chat_id": query.message.chat_id,
+                    "message_id": query.message.message_id,
+                    "remaining": 5,
+                    "current_move": (control, attack),
+                    "step": 1
+                }
+            )
         await query.edit_message_text(text, reply_markup=answer_keyboard())
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         sequence = context.user_data.get("fight_sequence")
@@ -122,61 +158,39 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["current_step"] = step
             
             if step < len(sequence):
+                # Останавливаем текущий таймер, если есть
+                if mode == "timed_fight" and context.job_queue.jobs():
+                    for job in context.job_queue.jobs():
+                        job.schedule_removal()
+                
                 # Показываем следующий удар
                 control, attack = sequence[step]
                 text = f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}"
                 if mode == "timed_fight":
-                    text += "\nУ вас 5 секунд на ответ!"
-                    context.job_queue.run_once(
-                        timeout_callback, 
-                        5, 
-                        data={"chat_id": query.message.chat_id, "message_id": query.message.message_id}
+                    text += "\nОсталось: 5 сек"
+                    context.job_queue.run_repeating(
+                        update_timer,
+                        interval=1,
+                        first=0,
+                        data={
+                            "chat_id": query.message.chat_id,
+                            "message_id": query.message.message_id,
+                            "remaining": 5,
+                            "current_move": (control, attack),
+                            "step": step + 1
+                        }
                     )
                 await query.edit_message_text(text, reply_markup=answer_keyboard())
             else:
+                # Останавливаем таймер при завершении
+                if mode == "timed_fight" and context.job_queue.jobs():
+                    for job in context.job_queue.jobs():
+                        job.schedule_removal()
                 # Бой завершён
                 correct_count = context.user_data["correct_count"]
                 total = len(MOVES)
                 result = f"Бой завершён!\nПравильных блоков: {correct_count} из {total}"
                 await query.edit_message_text(result)
-
-# Callback для таймера
-async def timeout_callback(context: ContextTypes.DEFAULT_TYPE):
-    job_data = context.job.data
-    chat_id = job_data["chat_id"]
-    message_id = job_data["message_id"]
-    
-    sequence = context.user_data.get("fight_sequence")
-    step = context.user_data.get("current_step")
-    
-    if sequence and step is not None and step < len(sequence):
-        # Переходим к следующему шагу при тайм-ауте
-        step += 1
-        context.user_data["current_step"] = step
-        
-        if step < len(sequence):
-            control, attack = sequence[step]
-            text = f"Время вышло!\nШаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\nУ вас 5 секунд на ответ!"
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=text,
-                reply_markup=answer_keyboard()
-            )
-            context.job_queue.run_once(
-                timeout_callback, 
-                5, 
-                data={"chat_id": chat_id, "message_id": message_id}
-            )
-        else:
-            correct_count = context.user_data["correct_count"]
-            total = len(MOVES)
-            result = f"Бой завершён!\nПравильных блоков: {correct_count} из {total}"
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=result
-            )
 
 # Главная функция
 async def main():
