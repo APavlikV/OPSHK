@@ -210,7 +210,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["control_count"] = 0
         context.user_data["hint_count"] = 0
         context.user_data["mode"] = query.data
-        context.user_data["fight_log"] = []
         context.user_data["last_message_id"] = None
 
         control, attack = fight_sequence[0]
@@ -270,9 +269,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Атака: {attack}\n" \
                         f"Защита и контратака: {chosen_defense}\n" \
                         f"{result_emoji} <b>{'УСПЕХ' if is_success else 'ПОРАЖЕНИЕ'}</b>" + (f" (правильно: {correct_answer})" if not is_success and correct_answer else "")
-            await query.message.reply_text(short_log, parse_mode="HTML")
+            short_msg = await query.message.reply_text(short_log, parse_mode="HTML")
             
-            # Формируем развёрнутый лог
+            # Формируем развёрнутый комментарий
             attacker_control_success = random.choice([True, False])
             attacker_attack_success = random.choice([True, False])
             counter_zone = random.choice(defense_data.get("counter", ["ДЗ"])) if is_success else random.choice(["ГДН", "СС", "ТР", "ДЗ"])
@@ -283,8 +282,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                           f"<i>{random.choice(ATTACK_PHRASES['attack_success' if attacker_attack_success else 'attack_fail'][attack])}</i> ⚔️ "
             defense_text = f"{random.choice(DEFENSE_PHRASES['defense_success' if control_success else 'defense_fail'][control if control_success else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))])} " \
                            f"{random.choice(DEFENSE_PHRASES['counter_success' if is_success else 'counter_fail'][chosen_defense])}"
-            detailed_log = f"<u>Атака {step + 1}</u>\n{attack_text}{defense_text}"
-            context.user_data["fight_log"].append(detailed_log)
+            detailed_log = f"{attack_text}{defense_text}"
+            await query.message.reply_text(detailed_log, parse_mode="HTML", reply_to_message_id=short_msg.message_id)
             
             if is_success:
                 context.user_data["correct_count"] += 1
@@ -329,10 +328,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 control_count = context.user_data["control_count"]
                 hint_count = context.user_data.get("hint_count", 0)
                 total = len(MOVES)
-                full_log = "<b>ЛОГ БОЯ</b>\n➖\n" + "\n➖\n".join(context.user_data["fight_log"]) + \
-                           f"\n\n<b>Статистика боя:</b>\nПравильных: {correct_count}, с подсказкой: {hint_count}, из {total}\n" \
-                           f"Отбито {control_count} из {total} контролей\nПропущено {total - correct_count} атак"
-                await query.message.reply_text(full_log, parse_mode="HTML")
+                final_stats = f"<b>Статистика боя:</b>\n" \
+                              f"Правильных: {correct_count}, с подсказкой: {hint_count}, из {total}\n" \
+                              f"Отбито {control_count} из {total} контролей\n" \
+                              f"Пропущено {total - correct_count} атак"
+                await query.message.reply_text(final_stats, parse_mode="HTML")
                 await query.edit_message_text("Бой завершён!")
 
 # Главная функция
