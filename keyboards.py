@@ -6,7 +6,7 @@ def start_keyboard():
 def menu_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Учебный бой", callback_data="training_fight")],
-        [InlineKeyboardButton("Арена", callback_data="arena")],
+        [InlineKeyboardButton("КАРАТЭ Арена", callback_data="karate_arena")],
         [InlineKeyboardButton("Правила", callback_data="rules")],
         [InlineKeyboardButton("Памятка", callback_data="memo")]
     ])
