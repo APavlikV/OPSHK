@@ -126,6 +126,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\n<b><i>🛡️ Правильный блок: {correct_answer}</i></b>",
                 reply_markup=answer_keyboard(show_hint=True)
+                parse_mode="HTML"
             )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         sequence = context.user_data.get("fight_sequence")
