@@ -2,7 +2,7 @@ from telegram.ext import ContextTypes
 from telegram import Update
 from keyboards import start_keyboard, menu_keyboard, training_mode_keyboard, answer_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
-from data import MOVES, DEFENSE_MOVES  # Добавляем DEFENSE_MOVES
+from data import MOVES  # Добавляем импорт MOVES
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,8 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
     await update.message.reply_text("Приветствуем в нашем тотализаторе!\nВыберите режим:", reply_markup=menu_keyboard())
 
-async def update_timer(context: ContextTypes.DEFAULT_TYPE):
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
     job = context.job
     chat_id = job.data["chat_id"]
     message_id = job.data["message_id"]
@@ -115,7 +116,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = await query.message.reply_text(text, reply_markup=answer_keyboard())
         context.user_data["last_message_id"] = msg.message_id
         await query.delete_message()
-    elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
+   elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
     sequence = context.user_data.get("fight_sequence")
     step = context.user_data.get("current_step")
     if sequence and step is not None:
