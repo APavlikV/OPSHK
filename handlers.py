@@ -2,7 +2,10 @@ from telegram.ext import ContextTypes
 from telegram import Update
 from keyboards import start_keyboard, menu_keyboard, training_mode_keyboard, answer_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
+from data import MOVES  # Добавляем импорт MOVES
 import logging
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
