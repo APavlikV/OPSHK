@@ -33,14 +33,13 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
+        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(send_hint=False), parse_mode="HTML")
     except Exception as e:
         logger.error(f"Ошибка обновления таймера: {e}")
 
     if remaining <= 0:
         try:
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            # Добавляем статистику
             final_stats = generate_final_stats(
                 context.user_data["correct_count"],
                 context.user_data["control_count"],
@@ -134,7 +133,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
+            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=False), parse_mode="HTML")
             context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -148,7 +147,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             )
         else:
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
         context.user_data["last_message_id"] = msg.message_id
         await query.delete_message()
     elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
@@ -203,7 +202,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
+                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=False), parse_mode="HTML")
                     context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
@@ -217,7 +216,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         }
                     )
                 else:
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
                 context.user_data["last_message_id"] = msg.message_id
                 await query.delete_message()
             else:
@@ -225,10 +224,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     for job in context.job_queue.jobs():
                         job.schedule_removal()
                 
-                # Показываем "Бой завершён!" после лога последней атаки
                 await query.message.reply_text("Бой завершён!", parse_mode="HTML")
-                
-                # Показываем статистику
                 final_stats = generate_final_stats(
                     context.user_data["correct_count"],
                     context.user_data["control_count"],
