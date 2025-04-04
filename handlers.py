@@ -82,7 +82,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Используйте эти знания, чтобы выбрать правильный блок и победить!",
             parse_mode="HTML"
         )
-    elif query.data == "arena":
+    elif query.data == "karate_arena":
         await query.edit_message_text("Арена: Пока в разработке!")
     elif query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
