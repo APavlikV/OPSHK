@@ -124,7 +124,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _, _, correct_answer = check_move(control, attack, "")
             context.user_data["hint_count"] += 1
             await query.edit_message_text(
-                f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\nПодсказка: {correct_answer}",
+                f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\n<b><i>🛡️ Правильный блок: {correct_answer}</i></b>",
                 reply_markup=answer_keyboard(show_hint=True)
             )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
