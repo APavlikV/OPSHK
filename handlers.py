@@ -197,7 +197,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data["last_message_id"] = msg.message_id
                 await query.delete_message()
             else:
-                if mode == "timed_fight" и context.job_queue.jobs():
+                if mode == "timed_fight" and context.job_queue.jobs():
                     for job in context.job_queue.jobs():
                         job.schedule_removal()
                 
