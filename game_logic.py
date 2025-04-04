@@ -42,9 +42,9 @@ def generate_detailed_log(control, attack, chosen_defense, is_success):
 
 def generate_final_stats(correct_count, control_count, hint_count, total):
     return (
-        f"<b>Статистика боя:</b>\n"
-        f"✅ <code>Правильных контр действий</code>: {correct_count}\n"
-        f"💡 <code>С подсказкой</code>: {hint_count}\n"
-        f"🛡️ <code>Отбито контролей</code>: {control_count}\n"
-        f"❌ <code>Пропущено атак</code>: {total - correct_count}"
+        f"<b>Статистика боя:</b>\n\n"
+        f"✅ <code>Правильных контр действий</code>: <b>{correct_count}</b>\n"
+        f"💡 <code>С подсказкой</code>: <b>{hint_count}</b>\n"
+        f"🛡️ <code>Отбито контролей</code>: <b>{control_count}</b>\n"
+        f"❌ <code>Пропущено атак</code>: <b>{total - correct_count}</b>"
     )
