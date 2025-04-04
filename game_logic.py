@@ -17,7 +17,7 @@ def check_move(control, attack, chosen_defense):
 
 def generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer):
     result_emoji = "🟢" if is_success else "🟠" if partial_success else "🔴"
-    return f"<code>⚔️ Атака {step + 1}</code>\n" \
+    return f"<code>⚔️ Атака {step + 1}</code>\n\n" \
            f"🎯 Контроль: <b>{control}</b>\n" \
            f"💥 Атака: <b>{attack}</b>\n" \
            f"Защита и контратака: {chosen_defense}\n" \
