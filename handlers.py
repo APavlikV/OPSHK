@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
-    await update.message.reply_text("🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!", reply_markup=start_keyboard())
+    await update.message.reply_text("🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
+    parse_mode="HTML",
+    reply_markup=start_keyboard())
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
