@@ -116,18 +116,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = await query.message.reply_text(text, reply_markup=answer_keyboard())
         context.user_data["last_message_id"] = msg.message_id
         await query.delete_message()
-   elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
-    sequence = context.user_data.get("fight_sequence")
-    step = context.user_data.get("current_step")
-    if sequence and step is not None:
-        control, attack = sequence[step]
-        _, _, correct_answer = check_move(control, attack, "")
-        context.user_data["hint_count"] += 1
-        await query.edit_message_text(
-            f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\n<b><i>🛡️ Правильный блок: {correct_answer}</i></b>",
-            reply_markup=answer_keyboard(show_hint=True),
-            parse_mode="HTML"
-        )
+    elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
+        sequence = context.user_data.get("fight_sequence")
+        step = context.user_data.get("current_step")
+        if sequence and step is not None:
+            control, attack = sequence[step]
+            _, _, correct_answer = check_move(control, attack, "")
+            context.user_data["hint_count"] += 1
+            await query.edit_message_text(
+                f"Шаг {step + 1} из {len(MOVES)}\nКонтроль: {control}\nАтака: {attack}\nПодсказка: {correct_answer}",
+                reply_markup=answer_keyboard(show_hint=True)
+            )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         sequence = context.user_data.get("fight_sequence")
         step = context.user_data.get("current_step")
