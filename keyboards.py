@@ -25,5 +25,5 @@ def answer_keyboard(show_hint=False):
         [InlineKeyboardButton("Гедан барай", callback_data="Гедан барай")]
     ]
     if not show_hint:
-        buttons.append([InlineKeyboardButton("Подсказка", callback_data="hint")])
+        buttons.append([InlineKeyboardButton("💡 Подсказка", callback_data="hint")])
     return InlineKeyboardMarkup(buttons)
