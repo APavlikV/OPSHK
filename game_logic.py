@@ -20,7 +20,7 @@ def generate_short_log(step, control, attack, chosen_defense, is_success, partia
     return f"<code>⚔️ Атака {step + 1}</code>\n\n" \
            f"🎯 Контроль: <b>{control}</b>\n" \
            f"💥 Атака: <b>{attack}</b>\n" \
-           f"Защита и контратака: {chosen_defense}\n" \
+           f"Защита и контратака: <b>{chosen_defense}</b>\n" \
            f"{result_emoji} <b>{'УСПЕХ' if is_success else 'ПОРАЖЕНИЕ'}</b>" + (f" (правильно: {correct_answer})" if not is_success and correct_answer else "")
 
 def generate_detailed_log(control, attack, chosen_defense, is_success):
