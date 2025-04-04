@@ -241,7 +241,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             attacker_attack_success = random.choice([True, False])
             counter_zone = random.choice(defense_data.get("counter", ["ДЗ"])) if is_success else random.choice(["ГДН", "СС", "ТР", "ДЗ"])
             
-            attacker_name = "<b>ОПШКА Вася</b>"
+            attacker_name = "<b>Bot Вася</b>"
             attack_text = f"{attacker_name} {'яростно атаковал' if attacker_attack_success else 'недолго думая ринулся в атаку'}: " \
                           f"<i>{random.choice(ATTACK_PHRASES['control_success' if attacker_control_success else 'control_fail'][control])}</i> " \
                           f"<i>{random.choice(ATTACK_PHRASES['attack_success' if attacker_attack_success else 'attack_fail'][attack])}</i> ⚔️ "
