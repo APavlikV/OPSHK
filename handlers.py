@@ -33,7 +33,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(show_hint=True), parse_mode="HTML")
+        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
     except Exception as e:
         logger.error(f"Ошибка обновления таймера: {e}")
 
@@ -126,7 +126,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(show_hint=True), parse_mode="HTML")
+            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -155,7 +155,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🎯 Контроль: <b>{control}</b>\n"
                 f"💥 Атака: <b>{attack}</b>\n"
                 f"<b><i>🛡️ Правильный блок: {correct_answer}</i></b>",
-                reply_markup=answer_keyboard(show_hint=True),
+                reply_markup=answer_keyboard(send_hint=True),
                 parse_mode="HTML"
             )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
@@ -195,7 +195,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(show_hint=True), parse_mode="HTML")
+                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
                     context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
@@ -217,12 +217,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     for job in context.job_queue.jobs():
                         job.schedule_removal()
                 
+                # После логов последней атаки
+                await query.delete_message()  # Удаляем сообщение с выбором защиты
+                await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")  # Сообщение после логов
+                
                 final_stats = generate_final_stats(
                     context.user_data["correct_count"],
                     context.user_data["control_count"],
                     context.user_data.get("hint_count", 0),
                     len(MOVES)
                 )
-                await query.message.reply_text(final_stats, parse_mode="HTML")
-                await query.edit_message_text("Бой завершён!")
+                await query.message.reply_text(final_stats, parse_mode="HTML")  # Статистика после "Бой завершён!"
                 logger.info("Бой успешно завершён")
