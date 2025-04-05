@@ -25,9 +25,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
 
-    if not job.data.get("is_active", True):
-        return  # Выходим, если таймер неактивен
-
     try:
         control, attack = job.data["current_move"]
         step = job.data["step"]
@@ -38,13 +35,16 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"Осталось: {remaining} сек"
         )
 
-        if remaining > 0:
+        # Обновляем сообщение только если шаг активен и время не вышло
+        if context.user_data.get("last_message_id") == message_id and remaining > 0:
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-        else:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            job.data["is_active"] = False
+        elif remaining <= 0:
+            # Время вышло, фиксируем конец таймера
+            job.data["timer_end_time"] = datetime.utcnow()
+            if "answer_time" not in job.data:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
+                context.user_data["timer_ended"] = True
             job.schedule_removal()
-            context.user_data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
 
@@ -76,16 +76,35 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "memo":
         await query.edit_message_text(
             "<b>ПАМЯТКА</b>\n➖\n"
-            "<u>Зоны:</u>\n"
-            "- <b>СС</b> — Солнечное сплетение\n"
-            "- <b>ТР</b> — Трахея\n"
-            "- <b>ДЗ</b> — Данто (голова)\n"
-            "- <b>ГДН</b> — Гедан (ниже пояса)\n\n"
-            "<u>Блоки:</u>\n"
-            "- <b>Аге уке</b>: СС → ДЗ/ТР\n"
-            "- <b>Учи уке</b>: СС → ДЗ/ТР\n"
-            "- <b>Сото уке</b>: ТР → ДЗ/СС\n"
-            "- <b>Гедан барай</b>: ДЗ → ТР/СС",
+            "Добро пожаловать в <b>КАРАТЭ</b> тотализатор! Здесь вы найдёте пояснения к зонам, используемым в бою:\n\n"
+            "<u>Зоны контроля и атаки:</u>\n"
+            "- <b>СС</b> — <i>Солнечное сплетение</i>: центр тела, уязвимая точка для ударов в живот или грудь.\n"
+            "- <b>ТР</b> — <i>Трахея</i>: область шеи и горла, удары сюда нарушают дыхание.\n"
+            "- <b>ДЗ</b> — <i>Данто (голова)</i>: зона головы, включая лицо и виски.\n"
+            "- <b>ГДН</b> — <i>Гедан (ниже пояса)</i>: нижняя часть тела, ноги или область под поясом.\n\n"
+            "<u>Защита и контратака:</u>\n"
+            "- <b>Аге уке</b>: защищает СС, контратакует в ДЗ или ТР.\n"
+            "- <b>Учи уке</b>: защищает СС, контратакует в ДЗ или ТР.\n"
+            "- <b>Сото уке</b>: защищает ТР, контратакует в ДЗ или СС.\n"
+            "- <b>Гедан барай</b>: защищает ДЗ, контратакует в ТР или СС.\n\n"
+            "Используйте эти знания, чтобы выбрать правильный блок и победить!\n\n"
+            "<b>P.S.</b> Нужно учитывать некоторые особенности, а именно:\n"
+            "<b>Во-первых</b>: Все технические элементы (аге, сото, учи и гедан) можно условно разделить на три части.\n"
+            "<b>1)</b> защита от контроля\n"
+            "<b>2)</b> контратака\n"
+            "<b>3)</b> завершающий элемент (это может быть как добивание, так и вынужденная защита от атаки после контроля)\n\n"
+            "<b>Например</b>: Аге уке\n"
+            "<b>1)</b> Защита области солнечного сплетения (СС)\n"
+            "<b>2)</b> Контратака тут может быть как в грудь, так и в голову (в зависимости от ситуации, соответственно, ДЗ или ТР)\n"
+            "<b>3)</b> Последний элемент Аге уке — это добивание в голову или защита головы (ТР или ДЗ)\n\n"
+            "Другие варианты контратак также многовариантны, и полезно понимание того, что последний элемент Аге уке не обязательно в ДЗ: возможен и уровень ТР.\n\n"
+            "Это тренажёр на воображение и открытие для себя понимания, что изучаемая техника далеко не однозначна и может использоваться вариабельно в зависимости от реальной ситуации.\n\n"
+            "Чтобы правильно ответить, необходимо представить весь процесс боевых действий и в своей голове воспроизвести каждый этап.\n\n"
+            "<b>Во-вторых</b>: как уже понятно, в представленном выше описании нет третьей части этих техник, поэтому это может вызвать некоторое недопонимание.\n"
+            "<b>Ещё раз</b> ☝🏻 Каждое техническое действие (аге, сото, учи и гедан) состоит из трёх частей:\n"
+            "<b>1)</b> защита от контроля\n"
+            "<b>2)</b> контратака\n"
+            "<b>3)</b> завершающий элемент (это может быть как добивание, так и вынужденная защита от атаки после контроля)\n\n",
             parse_mode="HTML"
         )
     elif query.data == "karate_arena":
@@ -110,6 +129,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
             msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            start_time = datetime.utcnow()
+            timer_end_time = start_time + timedelta(seconds=5)
             job = context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -120,7 +141,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "remaining": 5,
                     "current_move": (control, attack),
                     "step": 1,
-                    "is_active": True
+                    "timer_end_time": timer_end_time,
+                    "answer_time": None
                 }
             )
             context.user_data["current_timer"] = job
@@ -153,25 +175,42 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_message_id = context.user_data.get("last_message_id")
 
         if sequence and step is not None and query.message.message_id == current_message_id:
-            if context.user_data.get("timer_ended", False):
-                await query.message.reply_text("Время вышло! Вы проиграли.", parse_mode="HTML")
-                return
-
-            # Останавливаем таймер
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
-                job.data["is_active"] = False
+                job.data["answer_time"] = datetime.utcnow()  # Фиксируем время ответа
+                
+                # Ждём, пока таймер завершит шаг
+                if "timer_end_time" not in job.data:
+                    logger.info(f"Waiting for timer to end for step {step}")
+                    return
+                
+                timer_end_time = job.data["timer_end_time"]
+                answer_time = job.data["answer_time"]
+
+                # Останавливаем таймер
                 job.schedule_removal()
-                logger.info(f"Stopped timer {job.id}")
                 del context.user_data["current_timer"]
 
-            # Удаляем текущее сообщение
-            try:
-                await query.delete_message()
-            except Exception as e:
-                logger.error(f"Ошибка удаления сообщения: {e}")
+                # Сравниваем время ответа и конец таймера
+                if answer_time >= timer_end_time:
+                    await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
+                    context.user_data["timer_ended"] = True
+                    return
 
-            # Обрабатываем текущий шаг
+                # Успел ответить вовремя, удаляем сообщение
+                try:
+                    await query.delete_message()
+                except Exception as e:
+                    logger.error(f"Ошибка удаления сообщения: {e}")
+
+            elif mode == "simple_fight":
+                # Для простого боя сразу удаляем сообщение
+                try:
+                    await query.delete_message()
+                except Exception as e:
+                    logger.error(f"Ошибка удаления сообщения: {e}")
+
+            # Обрабатываем шаг
             control, attack = sequence[step]
             chosen_defense = query.data
             is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
@@ -210,6 +249,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+                    start_time = datetime.utcnow()
+                    timer_end_time = start_time + timedelta(seconds=5)
                     job = context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
@@ -220,7 +261,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "remaining": 5,
                             "current_move": (control, attack),
                             "step": step + 1,
-                            "is_active": True
+                            "timer_end_time": timer_end_time,
+                            "answer_time": None
                         }
                     )
                     context.user_data["current_timer"] = job
