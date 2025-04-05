@@ -39,7 +39,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
     except Exception as e:
         logger.error(f"Ошибка обновления таймера: {e}")
-        job.data["is_step_active"] = False  # Отключаем шаг, если сообщение недоступно
+        job.data["is_step_active"] = False
         return
 
     if remaining <= 0:
@@ -122,7 +122,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["hint_count"] = 0
         context.user_data["mode"] = query.data
         context.user_data["last_message_id"] = None
-        context.user_data["processing_step"] = None  # Для отслеживания текущего шага
+        context.user_data["step_processed"] = False  # Флаг обработки шага
         if "current_timer" in context.user_data:
             del context.user_data["current_timer"]
 
@@ -175,13 +175,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sequence = context.user_data.get("fight_sequence")
         step = context.user_data.get("current_step")
         mode = context.user_data.get("mode")
+        current_message_id = context.user_data.get("last_message_id")
         
-        if sequence and step is not None:
-            # Проверка на повторный клик
-            if context.user_data.get("processing_step") == step:
+        if sequence and step is not None and query.message.message_id == current_message_id:
+            # Проверка, обработан ли шаг
+            if context.user_data.get("step_processed", False):
                 logger.info(f"Повторный клик на шаге {step}, игнорируем")
                 return
-            context.user_data["processing_step"] = step  # Отмечаем шаг как обрабатываемый
+            
+            # Отмечаем шаг как обработанный
+            context.user_data["step_processed"] = True
             
             # Мгновенная обратная связь
             processing_msg = await query.message.reply_text("⏳ Обработка вашего хода...", parse_mode="HTML")
@@ -243,6 +246,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
                 context.user_data["last_message_id"] = msg.message_id
+                context.user_data["step_processed"] = False  # Сбрасываем для следующего шага
             else:
                 if mode == "timed_fight" and "current_timer" in context.user_data:
                     current_job = context.user_data["current_timer"]
@@ -265,11 +269,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 await query.message.reply_text(final_stats, parse_mode="HTML")
                 logger.info("Бой успешно завершён")
+                context.user_data["step_processed"] = False
             
-            # Удаляем сообщение "Обработка..." после завершения
+            # Удаляем сообщение "Обработка..."
             try:
                 await context.bot.delete_message(chat_id=query.message.chat_id, message_id=processing_msg.message_id)
             except Exception as e:
                 logger.error(f"Ошибка удаления сообщения 'Обработка...': {e}")
-            
-            context.user_data["processing_step"] = None  # Сбрасываем обработку шага
+        else:
+            logger.info(f"Клик не соответствует текущему шагу {step} или сообщению {current_message_id}, игнорируем")
+
