@@ -10,12 +10,17 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
+    # Инициализируем context.user_data, если он None
+    if context.user_data is None:
+        context.user_data = {}
     await update.message.reply_text("🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
     parse_mode="HTML",
     reply_markup=start_keyboard())
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
+    if context.user_data is None:
+        context.user_data = {}
     await update.message.reply_text("Приветствуем в нашем тотализаторе!\nВыберите режим:", reply_markup=menu_keyboard())
 
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
@@ -26,16 +31,17 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job.data["remaining"] = remaining
 
     try:
-        # Проверяем актуальность сообщения перед редактированием
-        if context.user_data.get("last_message_id") != message_id:
+        # Проверяем актуальность сообщения через job.data
+        last_message_id = job.data.get("last_message_id")
+        if last_message_id != message_id:
             logger.info(f"Message {message_id} is outdated, skipping edit")
             job.schedule_removal()
             return
 
         control, attack = job.data["current_move"]
-        step = context.user_data["current_step"] + 1  # Используем только user_data
+        step = job.data["step"]
         text = (
-            f"<code>⚔️ Шаг {step} из {len(MOVES)}</code>\n\n"
+            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
             f"🎯 Контроль: <b>{control}</b>\n"
             f"💥 Атака: <b>{attack}</b>\n"
             f"Осталось: {remaining} сек"
@@ -47,7 +53,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             job.data["timer_end_time"] = datetime.utcnow()
             if "answer_time" not in job.data:
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-                context.user_data["timer_ended"] = True
+                job.data["timer_ended"] = True
             job.schedule_removal()
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
@@ -73,8 +79,11 @@ async def show_next_move(context, chat_id, mode, sequence, step):
                 "message_id": msg.message_id,
                 "remaining": 5,
                 "current_move": (control, attack),
+                "step": step,
                 "timer_end_time": timer_end_time,
-                "answer_time": None
+                "answer_time": None,
+                "last_message_id": msg.message_id,  # Храним в job.data
+                "timer_ended": False
             }
         )
         context.user_data["current_timer"] = job
@@ -87,6 +96,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     logger.info(f"Нажата кнопка: {query.data}")
+    if context.user_data is None:
+        context.user_data = {}
 
     if query.data == "rules":
         await query.edit_message_text(
@@ -191,12 +202,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 del context.user_data["current_timer"]
 
                 # Проверяем время
-                if answer_time >= timer_end_time:
+                if answer_time >= timer_end_time or job.data.get("timer_ended", False):
                     await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
                     context.user_data["timer_ended"] = True
                     return
 
-            # Удаляем сообщение только после обработки таймера
+            # Удаляем сообщение после обработки таймера
             try:
                 await query.delete_message()
             except Exception as e:
