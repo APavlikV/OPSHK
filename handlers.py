@@ -24,12 +24,13 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
 
-    # Проверяем, активен ли шаг через job.data
+    # Проверяем, активен ли шаг, и выходим сразу, если нет
     if not job.data.get("is_step_active", False):
         if job in context.job_queue.jobs():
             job.schedule_removal()
         return
 
+    # Если шаг активен, обновляем таймер
     control, attack = job.data["current_move"]
     text = (
         f"<code>⚔️ Шаг {job.data['step']} из {len(MOVES)}</code>\n\n"
@@ -146,7 +147,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "remaining": 5,
                     "current_move": (control, attack),
                     "step": 1,
-                    "is_step_active": True  # Шаг активен
+                    "is_step_active": True
                 }
             )
         else:
@@ -195,7 +196,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if step < len(sequence):
                 if mode == "timed_fight" and context.job_queue.jobs():
                     for job in context.job_queue.jobs():
-                        job.data["is_step_active"] = False  # Деактивируем текущий шаг
+                        job.data["is_step_active"] = False
                         job.schedule_removal()
                 
                 control, attack = sequence[step]
@@ -217,7 +218,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "remaining": 5,
                             "current_move": (control, attack),
                             "step": step + 1,
-                            "is_step_active": True  # Активируем новый шаг
+                            "is_step_active": True
                         }
                     )
                 else:
@@ -227,7 +228,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 if mode == "timed_fight" and context.job_queue.jobs():
                     for job in context.job_queue.jobs():
-                        job.data["is_step_active"] = False  # Бой завершён
+                        job.data["is_step_active"] = False
                         job.schedule_removal()
                 
                 await query.delete_message()
