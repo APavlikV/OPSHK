@@ -8,7 +8,7 @@ from handlers import start, game, button
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Добавляем обработчик ошибок для JobQueue
+# Обработчик ошибок для JobQueue
 async def error_handler(context):
     logger.error(f"Произошла ошибка в задании: {context.error}", exc_info=True)
 
