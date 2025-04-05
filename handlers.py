@@ -28,35 +28,31 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     if not job.data.get("is_step_active", False):
         return  # Выходим, если шаг неактивен
 
-    control, attack = job.data["current_move"]
-    text = (
-        f"<code>⚔️ Шаг {job.data['step']} из {len(MOVES)}</code>\n\n"
-        f"🎯 Контроль: <b>{control}</b>\n"
-        f"💥 Атака: <b>{attack}</b>\n"
-        f"Осталось: {remaining} сек"
-    )
-    
-    # Проверяем, не истекло ли время
-    timer_end_time = context.user_data.get("timer_end_time")
-    current_time = datetime.utcnow()
-    answer_time = context.user_data.get("answer_time")
+    try:
+        control, attack = job.data["current_move"]
+        text = (
+            f"<code>⚔️ Шаг {job.data['step']} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>\n"
+            f"Осталось: {remaining} сек"
+        )
+        
+        # Проверяем, не истекло ли время
+        timer_end_time = context.user_data.get("timer_end_time", datetime.utcnow())  # Значение по умолчанию
+        current_time = datetime.utcnow()
+        answer_time = context.user_data.get("answer_time")
 
-    if remaining > 0 and (not answer_time or answer_time > timer_end_time):
-        try:
+        if remaining > 0 and (not answer_time or answer_time > timer_end_time):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-        except Exception as e:
-            logger.error(f"Ошибка обновления таймера: {e}")
-            job.data["is_step_active"] = False
-            return
-    elif remaining <= 0 and (not answer_time or timer_end_time < answer_time):
-        try:
+        elif remaining <= 0 and (not answer_time or timer_end_time < answer_time):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
             job.data["is_step_active"] = False
             job.schedule_removal()
-            context.user_data["timer_ended"] = True  # Отмечаем, что таймер завершился
-        except Exception as e:
-            logger.error(f"Ошибка при завершении таймера: {e}")
-            job.data["is_step_active"] = False
+            context.user_data["timer_ended"] = True
+    except Exception as e:
+        logger.error(f"Ошибка в update_timer: {e}", exc_info=True)  # Логируем с полной трассировкой
+        job.data["is_step_active"] = False
+        job.schedule_removal()  # Останавливаем задачу при ошибке
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
