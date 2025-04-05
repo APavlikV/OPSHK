@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
-    # Инициализируем context.user_data, если он None
     if context.user_data is None:
         context.user_data = {}
     await update.message.reply_text("🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
@@ -31,10 +30,10 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job.data["remaining"] = remaining
 
     try:
-        # Проверяем актуальность сообщения через job.data
+        # Проверяем актуальность сообщения и шага
         last_message_id = job.data.get("last_message_id")
-        if last_message_id != message_id:
-            logger.info(f"Message {message_id} is outdated, skipping edit")
+        if last_message_id != message_id or job.data.get("step_completed", False):
+            logger.info(f"Message {message_id} is outdated or step completed, skipping edit")
             job.schedule_removal()
             return
 
@@ -82,8 +81,9 @@ async def show_next_move(context, chat_id, mode, sequence, step):
                 "step": step,
                 "timer_end_time": timer_end_time,
                 "answer_time": None,
-                "last_message_id": msg.message_id,  # Храним в job.data
-                "timer_ended": False
+                "last_message_id": msg.message_id,
+                "timer_ended": False,
+                "step_completed": False  # Флаг завершения шага
             }
         )
         context.user_data["current_timer"] = job
@@ -197,7 +197,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 timer_end_time = job.data["timer_end_time"]
                 answer_time = job.data["answer_time"]
 
-                # Останавливаем таймер
+                # Помечаем шаг как завершённый и останавливаем таймер
+                job.data["step_completed"] = True
                 job.schedule_removal()
                 del context.user_data["current_timer"]
 
@@ -207,7 +208,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["timer_ended"] = True
                     return
 
-            # Удаляем сообщение после обработки таймера
+            # Удаляем сообщение после остановки таймера
             try:
                 await query.delete_message()
             except Exception as e:
