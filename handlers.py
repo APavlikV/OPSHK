@@ -37,6 +37,11 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"Осталось: {remaining} сек"
         )
         
+        # Проверяем, есть ли context.user_data
+        if context.user_data is None:
+            logger.warning("context.user_data is None in update_timer, skipping")
+            return
+        
         # Проверяем, не истекло ли время
         timer_end_time = context.user_data.get("timer_end_time", datetime.utcnow())  # Значение по умолчанию
         current_time = datetime.utcnow()
@@ -50,9 +55,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             job.schedule_removal()
             context.user_data["timer_ended"] = True
     except Exception as e:
-        logger.error(f"Ошибка в update_timer: {e}", exc_info=True)  # Логируем с полной трассировкой
-        job.data["is_step_active"] = False
-        job.schedule_removal()  # Останавливаем задачу при ошибке
+        logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -213,6 +216,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     current_job.data["is_step_active"] = False
                     current_job.schedule_removal()
                     del context.user_data["current_timer"]
+            
+            # Проверяем, что step не выходит за пределы sequence
+            if step >= len(sequence):
+                logger.error(f"Step {step} exceeds sequence length {len(sequence)}")
+                await query.message.reply_text("Ошибка: шаг боя превысил допустимый диапазон.", parse_mode="HTML")
+                return
             
             control, attack = sequence[step]
             chosen_defense = query.data
