@@ -26,8 +26,14 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job.data["remaining"] = remaining
 
     try:
+        # Проверяем актуальность сообщения перед редактированием
+        if context.user_data.get("last_message_id") != message_id:
+            logger.info(f"Message {message_id} is outdated, skipping edit")
+            job.schedule_removal()
+            return
+
         control, attack = job.data["current_move"]
-        step = job.data["step"]
+        step = context.user_data["current_step"] + 1  # Используем только user_data
         text = (
             f"<code>⚔️ Шаг {step} из {len(MOVES)}</code>\n\n"
             f"🎯 Контроль: <b>{control}</b>\n"
@@ -45,6 +51,37 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             job.schedule_removal()
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
+
+async def show_next_move(context, chat_id, mode, sequence, step):
+    control, attack = sequence[step]
+    text = (
+        f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
+        f"🎯 Контроль: <b>{control}</b>\n"
+        f"💥 Атака: <b>{attack}</b>"
+    )
+    if mode == "timed_fight":
+        text += "\nОсталось: 5 сек"
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+        start_time = datetime.utcnow()
+        timer_end_time = start_time + timedelta(seconds=5)
+        job = context.job_queue.run_repeating(
+            update_timer,
+            interval=1,
+            first=0,
+            data={
+                "chat_id": chat_id,
+                "message_id": msg.message_id,
+                "remaining": 5,
+                "current_move": (control, attack),
+                "timer_end_time": timer_end_time,
+                "answer_time": None
+            }
+        )
+        context.user_data["current_timer"] = job
+    else:
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
+    context.user_data["last_message_id"] = msg.message_id
+    return msg
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -110,36 +147,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["hint_count"] = 0
         context.user_data["mode"] = query.data
         context.user_data["timer_ended"] = False
-
-        control, attack = context.user_data["fight_sequence"][0]
-        text = (
-            f"<code>⚔️ Шаг 1 из {len(MOVES)}</code>\n\n"
-            f"🎯 Контроль: <b>{control}</b>\n"
-            f"💥 Атака: <b>{attack}</b>"
-        )
-        if query.data == "timed_fight":
-            text += "\nОсталось: 5 сек"
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
-            start_time = datetime.utcnow()
-            timer_end_time = start_time + timedelta(seconds=5)
-            job = context.job_queue.run_repeating(
-                update_timer,
-                interval=1,
-                first=0,
-                data={
-                    "chat_id": query.message.chat_id,
-                    "message_id": msg.message_id,
-                    "remaining": 5,
-                    "current_move": (control, attack),
-                    "step": 1,
-                    "timer_end_time": timer_end_time,
-                    "answer_time": None
-                }
-            )
-            context.user_data["current_timer"] = job
-        else:
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
-        context.user_data["last_message_id"] = msg.message_id
+        await show_next_move(context, query.message.chat_id, query.data, context.user_data["fight_sequence"], 0)
         try:
             await query.delete_message()
         except Exception as e:
@@ -170,7 +178,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 job = context.user_data["current_timer"]
                 job.data["answer_time"] = datetime.utcnow()  # Фиксируем время ответа
                 
-                # Ждём, пока таймер завершит шаг
+                # Ждём завершения таймера
                 if "timer_end_time" not in job.data:
                     logger.info(f"Waiting for timer to end for step {step}")
                     return
@@ -182,24 +190,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 job.schedule_removal()
                 del context.user_data["current_timer"]
 
-                # Сравниваем время ответа и конец таймера
+                # Проверяем время
                 if answer_time >= timer_end_time:
                     await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
                     context.user_data["timer_ended"] = True
                     return
 
-                # Успел ответить вовремя, удаляем сообщение
-                try:
-                    await query.delete_message()
-                except Exception as e:
-                    logger.error(f"Ошибка удаления сообщения: {e}")
-
-            elif mode == "simple_fight":
-                # Для простого боя сразу удаляем сообщение
-                try:
-                    await query.delete_message()
-                except Exception as e:
-                    logger.error(f"Ошибка удаления сообщения: {e}")
+            # Удаляем сообщение только после обработки таймера
+            try:
+                await query.delete_message()
+            except Exception as e:
+                logger.error(f"Ошибка удаления сообщения: {e}")
 
             # Обрабатываем шаг
             control, attack = sequence[step]
@@ -229,36 +230,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text(final_stats, parse_mode="HTML")
                 logger.info("Бой успешно завершён")
             else:
-                step += 1
-                context.user_data["current_step"] = step
-                control, attack = sequence[step]
-                text = (
-                    f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
-                    f"🎯 Контроль: <b>{control}</b>\n"
-                    f"💥 Атака: <b>{attack}</b>"
-                )
-                if mode == "timed_fight":
-                    text += "\nОсталось: 5 сек"
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
-                    start_time = datetime.utcnow()
-                    timer_end_time = start_time + timedelta(seconds=5)
-                    job = context.job_queue.run_repeating(
-                        update_timer,
-                        interval=1,
-                        first=0,
-                        data={
-                            "chat_id": query.message.chat_id,
-                            "message_id": msg.message_id,
-                            "remaining": 5,
-                            "current_move": (control, attack),
-                            "step": step + 1,
-                            "timer_end_time": timer_end_time,
-                            "answer_time": None
-                        }
-                    )
-                    context.user_data["current_timer"] = job
-                else:
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
-                context.user_data["last_message_id"] = msg.message_id
+                context.user_data["current_step"] += 1
+                await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
         else:
             logger.info(f"Клик не соответствует текущему шагу {step} или сообщению {current_message_id}, игнорируем")
