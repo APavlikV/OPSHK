@@ -28,6 +28,11 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     if not job.data.get("is_step_active", False):
         return  # Выходим, если шаг неактивен
 
+    # Дополнительная проверка: если таймер должен быть остановлен, выходим сразу
+    if "current_timer" not in context.user_data or context.user_data["current_timer"] != job:
+        logger.info(f"Job {job.id} is outdated, skipping execution")
+        return
+
     try:
         control, attack = job.data["current_move"]
         text = (
@@ -37,7 +42,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"Осталось: {remaining} сек"
         )
 
-        # Используем данные из job.data вместо context.user_data
         timer_end_time = job.data.get("timer_end_time")
         answer_time = job.data.get("answer_time")
         current_time = datetime.utcnow()
@@ -49,6 +53,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             job.data["is_step_active"] = False
             job.schedule_removal()
             job.data["timer_ended"] = True
+            context.user_data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
 
@@ -221,31 +226,37 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Ошибка удаления сообщения при переходе на шаг {step + 1}: {e}")
             
-            # Проверяем, что step не выходит за пределы sequence
-            if step >= len(sequence):
-                logger.error(f"Step {step} exceeds sequence length {len(sequence)}")
-                await query.message.reply_text("Ошибка: шаг боя превысил допустимый диапазон.", parse_mode="HTML")
-                return
-            
-            control, attack = sequence[step]
-            chosen_defense = query.data
-            is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
-            
-            short_log = generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer)
-            short_msg = await query.message.reply_text(short_log, parse_mode="HTML")
-            
-            detailed_log = generate_detailed_log(control, attack, chosen_defense, is_success)
-            await query.message.reply_text(detailed_log, parse_mode="HTML", reply_to_message_id=short_msg.message_id)
-            
-            if is_success:
-                context.user_data["correct_count"] += 1
-            if control == DEFENSE_MOVES[chosen_defense]["control"]:
-                context.user_data["control_count"] += 1
-            
-            step += 1
-            context.user_data["current_step"] = step
-            
-            if step < len(sequence):
+            # Проверяем текущий шаг до инкремента
+            if step >= len(sequence) - 1:  # Последний шаг уже обработан
+                await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
+                final_stats = generate_final_stats(
+                    context.user_data["correct_count"],
+                    context.user_data["control_count"],
+                    context.user_data.get("hint_count", 0),
+                    len(MOVES)
+                )
+                await query.message.reply_text(final_stats, parse_mode="HTML")
+                logger.info("Бой успешно завершён")
+                context.user_data["step_processed"] = False
+            else:
+                control, attack = sequence[step]
+                chosen_defense = query.data
+                is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
+                
+                short_log = generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer)
+                short_msg = await query.message.reply_text(short_log, parse_mode="HTML")
+                
+                detailed_log = generate_detailed_log(control, attack, chosen_defense, is_success)
+                await query.message.reply_text(detailed_log, parse_mode="HTML", reply_to_message_id=short_msg.message_id)
+                
+                if is_success:
+                    context.user_data["correct_count"] += 1
+                if control == DEFENSE_MOVES[chosen_defense]["control"]:
+                    context.user_data["control_count"] += 1
+                
+                step += 1
+                context.user_data["current_step"] = step
+                
                 control, attack = sequence[step]
                 text = (
                     f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
@@ -278,17 +289,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
                 context.user_data["last_message_id"] = msg.message_id
-                context.user_data["step_processed"] = False
-            else:
-                await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
-                final_stats = generate_final_stats(
-                    context.user_data["correct_count"],
-                    context.user_data["control_count"],
-                    context.user_data.get("hint_count", 0),
-                    len(MOVES)
-                )
-                await query.message.reply_text(final_stats, parse_mode="HTML")
-                logger.info("Бой успешно завершён")
                 context.user_data["step_processed"] = False
             
             try:
