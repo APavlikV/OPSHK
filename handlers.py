@@ -36,16 +36,11 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"💥 Атака: <b>{attack}</b>\n"
             f"Осталось: {remaining} сек"
         )
-        
-        # Проверяем, есть ли context.user_data
-        if context.user_data is None:
-            logger.warning("context.user_data is None in update_timer, skipping")
-            return
-        
-        # Проверяем, не истекло ли время
-        timer_end_time = context.user_data.get("timer_end_time", datetime.utcnow())  # Значение по умолчанию
+
+        # Используем данные из job.data вместо context.user_data
+        timer_end_time = job.data.get("timer_end_time")
+        answer_time = job.data.get("answer_time")
         current_time = datetime.utcnow()
-        answer_time = context.user_data.get("answer_time")
 
         if remaining > 0 and (not answer_time or answer_time > timer_end_time):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
@@ -53,7 +48,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
             job.data["is_step_active"] = False
             job.schedule_removal()
-            context.user_data["timer_ended"] = True
+            job.data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
 
@@ -130,8 +125,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["mode"] = query.data
         context.user_data["last_message_id"] = None
         context.user_data["step_processed"] = False
-        context.user_data["timer_end_time"] = None
-        context.user_data["answer_time"] = None
         context.user_data["timer_ended"] = False
         if "current_timer" in context.user_data:
             del context.user_data["current_timer"]
@@ -146,7 +139,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "\nОсталось: 5 сек"
             msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
             start_time = datetime.utcnow()
-            context.user_data["timer_end_time"] = start_time + timedelta(seconds=5)
+            timer_end_time = start_time + timedelta(seconds=5)
             job = context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -157,7 +150,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "remaining": 5,
                     "current_move": (control, attack),
                     "step": 1,
-                    "is_step_active": True
+                    "is_step_active": True,
+                    "timer_end_time": timer_end_time,
+                    "answer_time": None,
+                    "timer_ended": False
                 }
             )
             context.user_data["current_timer"] = job
@@ -195,7 +191,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             
             context.user_data["step_processed"] = True
-            context.user_data["answer_time"] = datetime.utcnow()  # Фиксируем время ответа
+            answer_time = datetime.utcnow()  # Фиксируем время ответа
             
             # Проверяем, не завершился ли таймер раньше
             if mode == "timed_fight" and context.user_data.get("timer_ended", False):
@@ -209,11 +205,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Мгновенная обратная связь
             processing_msg = await query.message.reply_text("⏳ Обработка вашего хода...", parse_mode="HTML")
             
-            # Останавливаем таймер перед дальнейшей обработкой
+            # Останавливаем таймер и обновляем answer_time
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 current_job = context.user_data["current_timer"]
                 if current_job in context.job_queue.jobs():
                     current_job.data["is_step_active"] = False
+                    current_job.data["answer_time"] = answer_time
                     current_job.schedule_removal()
                     del context.user_data["current_timer"]
             
@@ -258,9 +255,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text += "\nОсталось: 5 сек"
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
                     start_time = datetime.utcnow()
-                    context.user_data["timer_end_time"] = start_time + timedelta(seconds=5)
-                    context.user_data["timer_ended"] = False
-                    context.user_data["answer_time"] = None
+                    timer_end_time = start_time + timedelta(seconds=5)
                     job = context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
@@ -271,7 +266,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "remaining": 5,
                             "current_move": (control, attack),
                             "step": step + 1,
-                            "is_step_active": True
+                            "is_step_active": True,
+                            "timer_end_time": timer_end_time,
+                            "answer_time": None,
+                            "timer_ended": False
                         }
                     )
                     context.user_data["current_timer"] = job
