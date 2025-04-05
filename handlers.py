@@ -118,7 +118,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Арена: Пока в разработке!")
     elif query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
-        elif query.data in ["simple_fight", "timed_fight"]:
+    elif query.data in ["simple_fight", "timed_fight"]:
         context.user_data["fight_sequence"] = generate_fight_sequence()
         context.user_data["current_step"] = 0
         context.user_data["correct_count"] = 0
