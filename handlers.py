@@ -25,9 +25,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
 
-    if not job.data.get("is_active", True):
-        return  # Выходим, если таймер неактивен
-
     try:
         control, attack = job.data["current_move"]
         step = job.data["step"]
@@ -40,11 +37,12 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
 
         if remaining > 0:
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-        else:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            job.data["is_active"] = False
+        elif remaining <= 0:
+            job.data["timer_end_time"] = datetime.utcnow()
+            if "answer_time" not in job.data:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
+                context.user_data["timer_ended"] = True
             job.schedule_removal()
-            context.user_data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
 
@@ -75,32 +73,31 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif query.data == "memo":
         await query.edit_message_text(
-    "<b>🧠 ПАМЯТКА</b>\n➖\n"
-    "<u>👊🏻 Зоны контроля и атаки:</u>\n"
-    "• <b>СС</b> — Чудан (солнечное сплетение)\n"
-    "• <b>ТР</b> — Чудан (трахея)\n"
-    "• <b>ДЗ</b> — Дзедан (голова)\n"
-    "• <b>ГДН</b> — Годан (ниже пояса)\n\n"
-    "<u>🛡️ Блоки:</u>\n"
-    "▫️ <b>Аге уке</b>\n"
-    "   • Защита: СС\n"
-    "   • Контратака: ДЗ / ТР\n"
-    "   • Добивание: ДЗ\n\n"
-    "▫️ <b>Учи уке</b>\n"
-    "   • Защита: СС\n"
-    "   • Контратака: ДЗ / ТР\n"
-    "   • Добивание: ДЗ / ТР / СС\n\n"
-    "▫️ <b>Сото уке</b>\n"
-    "   • Защита: ТР\n"
-    "   • Контратака: ДЗ / СС\n"
-    "   • Добивание: ДЗ / ТР / СС\n\n"
-    "▫️ <b>Гедан барай</b>\n"
-    "   • Защита: ДЗ\n"
-    "   • Контратака: ТР / СС\n"
-    "   • Добивание: ТР / СС / ГДН",
-    parse_mode="HTML"
-)
-
+            "<b>🧠 ПАМЯТКА</b>\n➖\n"
+            "<u>👊🏻 Зоны контроля и атаки:</u>\n"
+            "• <b>СС</b> — Чудан (солнечное сплетение)\n"
+            "• <b>ТР</b> — Чудан (трахея)\n"
+            "• <b>ДЗ</b> — Дзедан (голова)\n"
+            "• <b>ГДН</b> — Годан (ниже пояса)\n\n"
+            "<u>🛡️ Блоки:</u>\n"
+            "▫️ <b>Аге уке</b>\n"
+            "   • Защита: СС\n"
+            "   • Контратака: ДЗ / ТР\n"
+            "   • Добивание: ДЗ\n\n"
+            "▫️ <b>Учи уке</b>\n"
+            "   • Защита: СС\n"
+            "   • Контратака: ДЗ / ТР\n"
+            "   • Добивание: ДЗ / ТР / СС\n\n"
+            "▫️ <b>Сото уке</b>\n"
+            "   • Защита: ТР\n"
+            "   • Контратака: ДЗ / СС\n"
+            "   • Добивание: ДЗ / ТР / СС\n\n"
+            "▫️ <b>Гедан барай</b>\n"
+            "   • Защита: ДЗ\n"
+            "   • Контратака: ТР / СС\n"
+            "   • Добивание: ТР / СС / ГДН",
+            parse_mode="HTML"
+        )
     elif query.data == "karate_arena":
         await query.edit_message_text("Арена: Пока в разработке!")
     elif query.data == "training_fight":
@@ -123,6 +120,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
             msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            start_time = datetime.utcnow()
+            timer_end_time = start_time + timedelta(seconds=5)
             job = context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -133,7 +132,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "remaining": 5,
                     "current_move": (control, attack),
                     "step": 1,
-                    "is_active": True
+                    "timer_end_time": timer_end_time,
+                    "answer_time": None
                 }
             )
             context.user_data["current_timer"] = job
@@ -166,25 +166,42 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_message_id = context.user_data.get("last_message_id")
 
         if sequence and step is not None and query.message.message_id == current_message_id:
-            if context.user_data.get("timer_ended", False):
-                await query.message.reply_text("Время вышло! Вы проиграли.", parse_mode="HTML")
-                return
-
-            # Останавливаем таймер
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
-                job.data["is_active"] = False
+                job.data["answer_time"] = datetime.utcnow()  # Фиксируем время ответа
+                
+                # Ждём, пока таймер завершит шаг
+                if "timer_end_time" not in job.data:
+                    logger.info(f"Waiting for timer to end for step {step}")
+                    return
+                
+                timer_end_time = job.data["timer_end_time"]
+                answer_time = job.data["answer_time"]
+
+                # Останавливаем таймер
                 job.schedule_removal()
-                logger.info(f"Stopped timer {job.id}")
                 del context.user_data["current_timer"]
 
-            # Удаляем текущее сообщение
-            try:
-                await query.delete_message()
-            except Exception as e:
-                logger.error(f"Ошибка удаления сообщения: {e}")
+                # Сравниваем время ответа и конец таймера
+                if answer_time >= timer_end_time:
+                    await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
+                    context.user_data["timer_ended"] = True
+                    return
 
-            # Обрабатываем текущий шаг
+                # Успел ответить вовремя, удаляем сообщение
+                try:
+                    await query.delete_message()
+                except Exception as e:
+                    logger.error(f"Ошибка удаления сообщения: {e}")
+
+            elif mode == "simple_fight":
+                # Для простого боя сразу удаляем сообщение
+                try:
+                    await query.delete_message()
+                except Exception as e:
+                    logger.error(f"Ошибка удаления сообщения: {e}")
+
+            # Обрабатываем шаг
             control, attack = sequence[step]
             chosen_defense = query.data
             is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
@@ -223,6 +240,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+                    start_time = datetime.utcnow()
+                    timer_end_time = start_time + timedelta(seconds=5)
                     job = context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
@@ -233,7 +252,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "remaining": 5,
                             "current_move": (control, attack),
                             "step": step + 1,
-                            "is_active": True
+                            "timer_end_time": timer_end_time,
+                            "answer_time": None
                         }
                     )
                     context.user_data["current_timer"] = job
