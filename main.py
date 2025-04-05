@@ -8,6 +8,10 @@ from handlers import start, game, button
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Добавляем обработчик ошибок для JobQueue
+async def error_handler(context):
+    logger.error(f"Произошла ошибка в задании: {context.error}", exc_info=True)
+
 async def main():
     logger.info("Запуск бота...")
     token = os.getenv("TELEGRAM_TOKEN")
@@ -26,6 +30,10 @@ async def main():
     request = HTTPXRequest(read_timeout=60, connect_timeout=60)
     app = Application.builder().token(token).request(request).build()
 
+    # Регистрируем обработчик ошибок для JobQueue
+    app.job_queue.set_error_handler(error_handler)
+
+    # Регистрируем обработчики команд и кнопок
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
