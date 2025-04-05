@@ -205,14 +205,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Мгновенная обратная связь
             processing_msg = await query.message.reply_text("⏳ Обработка вашего хода...", parse_mode="HTML")
             
-            # Останавливаем таймер и обновляем answer_time
+            # Останавливаем таймер до удаления сообщения
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 current_job = context.user_data["current_timer"]
                 if current_job in context.job_queue.jobs():
                     current_job.data["is_step_active"] = False
                     current_job.data["answer_time"] = answer_time
-                    current_job.schedule_removal()
-                    del context.user_data["current_timer"]
+                    current_job.schedule_removal()  # Удаляем задачу
+                    logger.info(f"Removed job {current_job.id} before processing next step")
+                del context.user_data["current_timer"]
+            
+            # Удаляем текущее сообщение
+            try:
+                await query.delete_message()
+            except Exception as e:
+                logger.error(f"Ошибка удаления сообщения при переходе на шаг {step + 1}: {e}")
             
             # Проверяем, что step не выходит за пределы sequence
             if step >= len(sequence):
@@ -246,11 +253,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"💥 Атака: <b>{attack}</b>"
                 )
                 
-                try:
-                    await query.delete_message()
-                except Exception as e:
-                    logger.error(f"Ошибка удаления сообщения при переходе на шаг {step + 1}: {e}")
-                
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
@@ -278,11 +280,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data["last_message_id"] = msg.message_id
                 context.user_data["step_processed"] = False
             else:
-                try:
-                    await query.delete_message()
-                except Exception as e:
-                    logger.error(f"Ошибка удаления сообщения при завершении боя: {e}")
-                
                 await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
                 final_stats = generate_final_stats(
                     context.user_data["correct_count"],
