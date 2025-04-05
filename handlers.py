@@ -119,19 +119,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
     elif query.data in ["simple_fight", "timed_fight"]:
-        context.user_data["fight_sequence"] = generate_fight_sequence()
-        context.user_data["current_step"] = 0
-        context.user_data["correct_count"] = 0
-        context.user_data["control_count"] = 0
-        context.user_data["hint_count"] = 0
-        context.user_data["mode"] = query.data
-        context.user_data["last_message_id"] = None
-        context.user_data["step_processed"] = False
-        context.user_data["timer_end_time"] = None
-        context.user_data["answer_time"] = None
-        context.user_data["timer_ended"] = False
-        if "current_timer" in context.user_data:
-            del context.user_data["current_timer"]
+    context.user_data["fight_sequence"] = generate_fight_sequence()
+    context.user_data["current_step"] = 0
+    context.user_data["correct_count"] = 0
+    context.user_data["control_count"] = 0
+    context.user_data["hint_count"] = 0
+    context.user_data["mode"] = query.data
+    context.user_data["last_message_id"] = None
+    context.user_data["step_processed"] = False
+    context.user_data["timer_end_time"] = None
+    context.user_data["answer_time"] = None
+    context.user_data["timer_ended"] = False
+    if "current_timer" in context.user_data:
+        del context.user_data["current_timer"]
 
         control, attack = context.user_data["fight_sequence"][0]
         text = (
