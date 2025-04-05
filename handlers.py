@@ -4,6 +4,7 @@ from keyboards import start_keyboard, menu_keyboard, training_mode_keyboard, ans
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        # Проверяем, активно ли задание перед редактированием
         if job.data.get("is_step_active", False):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
     except Exception as e:
@@ -49,6 +49,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
             job.data["is_step_active"] = False
             job.schedule_removal()
+            context.user_data["timer_end_time"] = datetime.utcnow()  # Фиксируем время истечения
         except Exception as e:
             logger.error(f"Ошибка при завершении таймера: {e}")
 
@@ -125,6 +126,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["mode"] = query.data
         context.user_data["last_message_id"] = None
         context.user_data["step_processed"] = False
+        context.user_data["timer_end_time"] = None  # Для хранения времени истечения таймера
         if "current_timer" in context.user_data:
             del context.user_data["current_timer"]
 
@@ -137,6 +139,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "timed_fight":
             text += "\nОсталось: 5 сек"
             msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            start_time = datetime.utcnow()
+            context.user_data["timer_end_time"] = start_time + timedelta(seconds=5)  # Время истечения через 5 сек
             job = context.job_queue.run_repeating(
                 update_timer,
                 interval=1,
@@ -185,6 +189,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             
             context.user_data["step_processed"] = True
+            answer_time = datetime.utcnow()  # Фиксируем время ответа
+            
+            # Проверяем приоритет ответа и таймера
+            timer_end_time = context.user_data.get("timer_end_time")
+            if mode == "timed_fight" and timer_end_time and timer_end_time < answer_time:
+                await query.message.reply_text("Время вышло! Вы проиграли.", parse_mode="HTML")
+                if "current_timer" in context.user_data:
+                    current_job = context.user_data["current_timer"]
+                    if current_job in context.job_queue.jobs():
+                        current_job.data["is_step_active"] = False
+                        current_job.schedule_removal()
+                        del context.user_data["current_timer"]
+                try:
+                    await query.delete_message()
+                except Exception as e:
+                    logger.error(f"Ошибка удаления сообщения при истечении времени: {e}")
+                return
             
             # Мгновенная обратная связь
             processing_msg = await query.message.reply_text("⏳ Обработка вашего хода...", parse_mode="HTML")
@@ -222,14 +243,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"💥 Атака: <b>{attack}</b>"
                 )
                 
-                # Останавливаем таймер перед удалением сообщения
-                if mode == "timed_fight" and "current_timer" in context.user_data:
-                    current_job = context.user_data["current_timer"]
-                    if current_job in context.job_queue.jobs():
-                        current_job.data["is_step_active"] = False
-                        current_job.schedule_removal()
-                        del context.user_data["current_timer"]
-                
                 try:
                     await query.delete_message()
                 except Exception as e:
@@ -238,6 +251,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if mode == "timed_fight":
                     text += "\nОсталось: 5 сек"
                     msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
+                    start_time = datetime.utcnow()
+                    context.user_data["timer_end_time"] = start_time + timedelta(seconds=5)  # Обновляем время истечения
                     job = context.job_queue.run_repeating(
                         update_timer,
                         interval=1,
