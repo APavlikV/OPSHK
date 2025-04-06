@@ -29,10 +29,17 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
 
-    # Проверяем, актуально ли сообщение
-    current_message_id = context.user_data.get("last_message_id")
+    logger.info(f"update_timer: message_id={message_id}, remaining={remaining}")
+
+    # Проверяем наличие user_data и last_message_id
+    if "last_message_id" not in context.user_data:
+        logger.error("last_message_id not found in context.user_data, stopping timer")
+        job.schedule_removal()
+        return
+
+    current_message_id = context.user_data["last_message_id"]
     if current_message_id != message_id:
-        logger.info(f"Message {message_id} is outdated, stopping timer")
+        logger.info(f"Message {message_id} is outdated (current={current_message_id}), stopping timer")
         job.schedule_removal()
         return
 
@@ -47,8 +54,10 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         )
 
         if remaining > 0:
+            logger.info(f"Editing message {message_id} with remaining={remaining}")
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
         elif remaining <= 0:
+            logger.info(f"Time's up for message {message_id}")
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
             job.schedule_removal()
             context.user_data["timer_ended"] = True
@@ -65,8 +74,10 @@ async def show_next_move(context, chat_id, mode, sequence, step):
         f"Осталось: 5 сек"
     )
     msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+    context.user_data["last_message_id"] = msg.message_id  # Устанавливаем сразу после отправки
     
     if mode == "timed_fight":
+        logger.info(f"Starting timer for message {msg.message_id}, step {step}")
         job = context.job_queue.run_repeating(
             update_timer,
             interval=1,
@@ -80,7 +91,6 @@ async def show_next_move(context, chat_id, mode, sequence, step):
             }
         )
         context.user_data["current_timer"] = job
-    context.user_data["last_message_id"] = msg.message_id
     return msg
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
