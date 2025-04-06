@@ -1,50 +1,87 @@
-import random
-from data import MOVES, DEFENSE_MOVES, ATTACK_PHRASES, DEFENSE_PHRASES
+from enum import Enum
+from typing import Tuple, Dict
+from random import choice, randint
 
-def generate_fight_sequence():
-    sequence = MOVES.copy()
-    random.shuffle(sequence)
-    return sequence
+from data import Zone, MOVES, DEFENSE_MOVES, ATTACK_PHRASES, DEFENSE_PHRASES
 
-def check_move(control, attack, chosen_defense):
-    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-    control_success = control == defense_data.get("control")
-    attack_success = attack in defense_data.get("attack_defense", [])
-    is_success = control_success and attack_success
-    partial_success = not control_success and attack_success
-    correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["control"] and attack in data["attack_defense"]), None)
-    return is_success, partial_success, correct_answer
 
-def generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer):
-    result_emoji = "🟢" if is_success else "🟠" if partial_success else "🔴"
-    return (
-        f"<code>⚔️ Атака {step + 1}</code>\n\n"
-        f"🎯 Контроль: <b>{control}</b>\n"
-        f"💥 Атака: <b>{attack}</b>\n"
-        f"Защита и контратака: <b>{chosen_defense}</b>\n"
-        f"{result_emoji} <b>{'УСПЕХ' if is_success else 'ПОРАЖЕНИЕ'}</b>"
-        + (f" (правильно: {correct_answer})" if not is_success and correct_answer else "")
-    )
+class AttackResult(str, Enum):
+    SUCCESS = "success"
+    FAIL = "fail"
 
-def generate_detailed_log(control, attack, chosen_defense, is_success):
-    attacker_control_success = random.choice([True, False])
-    attacker_attack_success = random.choice([True, False])
-    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-    counter_zone = random.choice(defense_data.get("counter", ["ДЗ"])) if is_success else random.choice(["ГДН", "СС", "ТР", "ДЗ"])
-    
-    attacker_name = "<b>Bot Вася</b>"
-    attack_text = f"{attacker_name} {'яростно атаковал' if attacker_attack_success else 'недолго думая ринулся в атаку'}: " \
-                  f"<i>{random.choice(ATTACK_PHRASES['control_success' if attacker_control_success else 'control_fail'][control])}</i> " \
-                  f"<i>{random.choice(ATTACK_PHRASES['attack_success' if attacker_attack_success else 'attack_fail'][attack])}</i> ⚔️ "
-    defense_text = f"{random.choice(DEFENSE_PHRASES['defense_success' if control == defense_data.get('control') else 'defense_fail'][control if control == defense_data.get('control') else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))])} " \
-                   f"{random.choice(DEFENSE_PHRASES['counter_success' if is_success else 'counter_fail'][chosen_defense])}"
-    return f"{attack_text}{defense_text}"
 
-def generate_final_stats(correct_count, control_count, hint_count, total):
-    return (
-        f"<b>Статистика боя:</b>\n\n"
-        f"✅ <code>Правильных контр действий</code>: <b>{correct_count}</b>\n"
-        f"💡 <code>С подсказкой</code>: <b>{hint_count}</b>\n"
-        f"🛡️ <code>Отбито контролей</code>: <b>{control_count}</b>\n"
-        f"❌ <code>Пропущено атак</code>: <b>{total - correct_count}</b>"
-    )
+class DefenseResult(str, Enum):
+    SUCCESS = "success"
+    FAIL = "fail"
+
+
+class CounterResult(str, Enum):
+    SUCCESS = "success"
+    FAIL = "fail"
+
+
+def get_attack() -> Tuple[Zone, Zone]:
+    """Случайный выбор связки (контроль, атака)."""
+    control, attack = choice(MOVES)
+    return Zone(control), Zone(attack)
+
+
+def get_attack_description(control: Zone, attack: Zone,
+                           control_success: bool, attack_success: bool) -> str:
+    """Возвращает описание атаки с учетом успеха или провала."""
+    control_key = "control_success" if control_success else "control_fail"
+    attack_key = "attack_success" if attack_success else "attack_fail"
+
+    control_phrase = choice(ATTACK_PHRASES[control_key][control])
+    attack_phrase = choice(ATTACK_PHRASES[attack_key][attack])
+    return f"{control_phrase} {attack_phrase}"
+
+
+def is_defense_successful(defense: str, incoming_attack: Zone) -> bool:
+    """Проверяет, перекрывает ли выбранная защита зону атаки."""
+    defense_info = DEFENSE_MOVES.get(defense)
+    if not defense_info:
+        return False
+    return incoming_attack in defense_info["attack_defense"]
+
+
+def is_counter_available(defense: str, control_zone: Zone) -> bool:
+    """Проверяет, возможен ли контрудар по контролю."""
+    defense_info = DEFENSE_MOVES.get(defense)
+    if not defense_info:
+        return False
+    return control_zone in defense_info["counter"]
+
+
+def get_defense_description(defense: str, attack_zone: Zone,
+                            success: bool) -> str:
+    """Формирует фразу описания защиты."""
+    result_key = "defense_success" if success else "defense_fail"
+    return choice(DEFENSE_PHRASES[result_key][attack_zone])
+
+
+def get_counter_description(defense: str, success: bool) -> str:
+    """Формирует фразу описания контрудара."""
+    result_key = "counter_success" if success else "counter_fail"
+    return choice(DEFENSE_PHRASES[result_key][defense])
+
+
+def process_turn(defense: str, control: Zone, attack: Zone) -> Dict[str, str]:
+    """Обработка одного хода: защита, результат защиты и контратаки."""
+    defense_success = is_defense_successful(defense, attack)
+    counter_possible = is_counter_available(defense, control)
+
+    attack_text = get_attack_description(control, attack,
+                                         control_success=True,
+                                         attack_success=not defense_success)
+    defense_text = get_defense_description(defense, attack, defense_success)
+
+    counter_text = ""
+    if defense_success and counter_possible:
+        counter_text = get_counter_description(defense, success=randint(0, 1) == 1)
+
+    return {
+        "attack": attack_text,
+        "defense": defense_text,
+        "counter": counter_text
+    }
