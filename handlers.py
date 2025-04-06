@@ -194,8 +194,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
                 f"🎯 Контроль: <b>{control}</b>\n"
-                f"💥 Атака: <b>{attack}</b>\n"
-                f"<b><i>🛡️ Правильный блок: {correct_answer}</i></b>",
+                f"💥 Атака: <b>{attack}</b>\n\n"
+                f"<b><i>💡 Правильно: 🛡️{correct_answer}</i></b>",
                 reply_markup=answer_keyboard(send_hint=True),
                 parse_mode="HTML"
             )
