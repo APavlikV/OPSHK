@@ -1,128 +1,106 @@
-import logging
-from telegram import InlineKeyboardMarkup, Update
-from telegram.constants import ParseMode
-from telegram.error import BadRequest
-from telegram.ext import CallbackContext
+from aiogram import types, Router, F
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from logic import process_combat_turn, get_available_blocks
 
-from .keyboards import get_keyboard_by_step, get_rules_keyboard, get_memo_keyboard, get_hint_keyboard
-from .utils import MOVES, get_correct_answer, get_question_text
+router = Router()
 
-logger = logging.getLogger(__name__)
+# --- Кастомная клавиатура на команду /start ---
+start_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="Игра")]],
+    resize_keyboard=True
+)
 
-def init_user_data_if_empty(context: CallbackContext):
-    if context.user_data is None:
-        context.user_data = {}
+# --- Инлайн клавиатура для "Игра" ---
+game_menu_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Правила", callback_data="rules")],
+    [InlineKeyboardButton(text="Памятка", callback_data="memo")],
+    [InlineKeyboardButton(text="Тренировка", callback_data="training")],
+    [InlineKeyboardButton(text="Арена", callback_data="arena")]
+])
 
-def build_move_text(step: int, control: str, attack: str, remaining: int) -> str:
-    return (
-        f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
-        f"🎯 Контроль: <b>{control}</b>\n"
-        f"💥 Атака: <b>{attack}</b>\n"
-        f"Осталось: {remaining} сек"
-    )
+# --- Инлайн клавиатура для "Тренировка" ---
+training_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Простой бой", callback_data="simple_fight")],
+    [InlineKeyboardButton(text="Бой на время", callback_data="timed_fight")]
+])
 
-def clean_previous_message(context: CallbackContext):
-    message_id = context.user_data.get("message_id")
-    if message_id:
-        try:
-            context.bot.delete_message(chat_id=context.user_data["chat_id"], message_id=message_id)
-        except BadRequest as e:
-            logger.warning("Could not delete message: %s", e)
-        context.user_data.pop("message_id", None)
+# --- Инлайн клавиатура с вариантами блоков ---
+def block_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=block, callback_data=f"block:{block}")] for block in get_available_blocks()
+    ])
 
-def handle_rules(query):
-    query.edit_message_text(
-        text="📜 Правила боя:\n\n1. Выбирай сторону защиты.\n2. Угадывай атаку врага.\n3. Успей до окончания таймера!",
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_rules_keyboard()
-    )
+# --- ИСХОДНЫЕ ТЕКСТЫ ---
+RULES_TEXT = (
+    "📌 ПРАВИЛА\n"
+    "1. Противник наносит удар в одну из зон: СС, ТР, ДЗ, ГДН.\n"
+    "2. Вы выбираете блок. У каждого блока своя зона защиты.\n"
+    "3. Если блок сработал — вы можете контратаковать и добить.\n"
+    "4. Если блок не сработал — получаете урон.\n"
+    "Задача: выстоять и победить!"
+)
 
-def handle_memo(query):
-    query.edit_message_text(
-        text="📕 Памятка по уязвимостям:\n\n🛡️ Сторона защиты зависит от типа атаки.\nИзучи атаки, чтобы лучше угадывать!",
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_memo_keyboard()
-    )
+MEMO_TEXT = (
+    "🧠 ПАМЯТКА\n"
+    "➖\n"
+    "👊🏻 Зоны контроля и атаки:\n"
+    "• СС — Чудан (солнечное сплетение)\n"
+    "• ТР — Чудан (трахея)\n"
+    "• ДЗ — Дзедан (голова)\n"
+    "• ГДН — Годан (ниже пояса)\n\n"
+    "🛡️ Блоки:\n"
+    "▫️ Аге уке\n"
+    "   • Защита: СС\n"
+    "   • Контратака: ДЗ / ТР\n"
+    "   • Добивание: ДЗ\n\n"
+    "▫️ Учи уке\n"
+    "   • Защита: СС\n"
+    "   • Контратака: ДЗ / ТР\n"
+    "   • Добивание: ДЗ / ТР / СС\n\n"
+    "▫️ Сото уке\n"
+    "   • Защита: ТР\n"
+    "   • Контратака: ДЗ / СС\n"
+    "   • Добивание: ДЗ / ТР / СС\n\n"
+    "▫️ Гедан барай\n"
+    "   • Защита: ДЗ\n"
+    "   • Контратака: ТР / СС\n"
+    "   • Добивание: ТР / СС / ГДН"
+)
 
-def handle_hint(query, context):
-    step = context.user_data.get("step", 0)
-    if step < len(MOVES):
-        attack = MOVES[step]["attack"]
-        query.answer(text=f"💡 Подсказка: {attack}", show_alert=True)
-    else:
-        query.answer(text="Нет подсказки", show_alert=True)
+# --- Хендлеры ---
 
-def handle_fight_start(query, context):
-    context.user_data["step"] = 0
-    context.user_data["score"] = 0
-    context.user_data["sequence"] = MOVES
-    context.user_data["chat_id"] = query.message.chat_id
+@router.message(F.text == "/start")
+async def start_handler(message: Message):
+    await message.answer("Привет! Выбери режим:", reply_markup=start_keyboard)
 
-    step = 0
-    question_data = context.user_data["sequence"][step]
-    question_text = get_question_text(question_data)
-    reply_markup = InlineKeyboardMarkup(get_keyboard_by_step(step))
+@router.message(F.text == "Игра")
+async def game_menu_handler(message: Message):
+    await message.answer("Выбери действие:", reply_markup=game_menu_keyboard)
 
-    query.edit_message_text(
-        text=question_text,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.HTML
-    )
+@router.callback_query(F.data == "rules")
+async def rules_handler(callback: CallbackQuery):
+    await callback.message.edit_text(RULES_TEXT)
 
-def handle_defense_choice(query, context):
-    step = context.user_data.get("step", 0)
-    sequence = context.user_data.get("sequence", MOVES)
-    if step >= len(sequence):
-        query.answer()
-        return
+@router.callback_query(F.data == "memo")
+async def memo_handler(callback: CallbackQuery):
+    await callback.message.edit_text(MEMO_TEXT)
 
-    correct_answer = get_correct_answer(sequence[step])
-    chosen_answer = query.data
+@router.callback_query(F.data == "training")
+async def training_handler(callback: CallbackQuery):
+    await callback.message.edit_text("Выбери тренировку:", reply_markup=training_keyboard)
 
-    if chosen_answer == correct_answer:
-        context.user_data["score"] += 1
+@router.callback_query(F.data == "arena")
+async def arena_handler(callback: CallbackQuery):
+    await callback.message.edit_text("⚠️ Арена в разработке. Скоро!")
 
-    context.user_data["step"] += 1
-    next_step = context.user_data["step"]
+# --- Запуск тренировочного боя ---
+@router.callback_query(F.data == "simple_fight")
+async def simple_fight_handler(callback: CallbackQuery):
+    await callback.message.edit_text("Выбери блок:", reply_markup=block_keyboard())
 
-    if next_step >= len(sequence):
-        score = context.user_data.get("score", 0)
-        query.edit_message_text(
-            text=f"✅ Бой завершен!\n\n🏆 Правильных ответов: <b>{score} из {len(sequence)}</b>",
-            parse_mode=ParseMode.HTML
-        )
-        return
-
-    next_question = sequence[next_step]
-    question_text = get_question_text(next_question)
-    reply_markup = InlineKeyboardMarkup(get_keyboard_by_step(next_step))
-
-    query.edit_message_text(
-        text=question_text,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.HTML
-    )
-
-async def button(update: Update, context: CallbackContext):
-    init_user_data_if_empty(context)
-
-    query = update.callback_query
-    await query.answer()
-
-    data = query.data
-
-    if data == "rules":
-        handle_rules(query)
-
-    elif data == "memo":
-        handle_memo(query)
-
-    elif data == "hint":
-        handle_hint(query, context)
-
-    elif data == "fight":
-        handle_fight_start(query, context)
-
-    else:
-        handle_defense_choice(query, context)
-
+# --- Обработка выбранного блока ---
+@router.callback_query(F.data.startswith("block:"))
+async def block_choice_handler(callback: CallbackQuery):
+    block = callback.data.split(":")[1]
+    result = process_combat_turn(block)
+    await callback.message.edit_text(result, reply_markup=block_keyboard())
