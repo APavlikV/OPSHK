@@ -44,7 +44,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
 
         if remaining > 0:
             logger.info(f"Editing message {message_id} with remaining={remaining}")
-            # Проверяем, существует ли сообщение
             try:
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
             except BadRequest as e:
@@ -189,7 +188,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if sequence and step is not None and query.message.message_id == current_message_id:
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
-                job.schedule_removal()  # Останавливаем таймер
+                job.schedule_removal()
                 timer_ended = job.data.get("timer_ended", False)
                 del context.user_data["current_timer"]
 
@@ -197,11 +196,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
                     return
 
-            # Удаляем сообщение
+            # Удаляем сообщение, только если оно ещё существует
             try:
                 await query.delete_message()
-            except Exception as e:
-                logger.error(f"Ошибка удаления сообщения: {e}")
+            except BadRequest as e:
+                if "Message to delete not found" in str(e):
+                    logger.info(f"Message {query.message.message_id} already deleted, skipping")
+                else:
+                    logger.error(f"Ошибка удаления сообщения: {e}")
 
             # Обрабатываем шаг
             control, attack = sequence[step]
@@ -230,6 +232,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 await query.message.reply_text(final_stats, parse_mode="HTML")
                 logger.info("Бой успешно завершён")
+                # Очищаем состояние, чтобы предотвратить повторные вызовы
+                context.user_data.clear()
             else:
                 context.user_data["current_step"] += 1
                 await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
