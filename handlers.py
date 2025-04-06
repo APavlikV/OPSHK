@@ -31,23 +31,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"update_timer: message_id={message_id}, remaining={remaining}")
 
-    # Проверяем, не ушло ли время в минус или не актуально ли сообщение
-    if remaining < 0:
-        logger.info(f"Remaining went negative for message {message_id}, stopping timer")
-        job.schedule_removal()
-        return
-
-    if "last_message_id" not in context.user_data:
-        logger.error("last_message_id not found in context.user_data, stopping timer")
-        job.schedule_removal()
-        return
-
-    current_message_id = context.user_data["last_message_id"]
-    if current_message_id != message_id:
-        logger.info(f"Message {message_id} is outdated (current={current_message_id}), stopping timer")
-        job.schedule_removal()
-        return
-
     try:
         control, attack = job.data["current_move"]
         step = job.data["step"]
@@ -61,11 +44,11 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         if remaining > 0:
             logger.info(f"Editing message {message_id} with remaining={remaining}")
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-        else:  # remaining == 0
+        else:
             logger.info(f"Time's up for message {message_id}")
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            context.user_data["timer_ended"] = True
             job.schedule_removal()
+            job.data["timer_ended"] = True  # Флаг для проверки в button
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
         job.schedule_removal()
@@ -92,7 +75,8 @@ async def show_next_move(context, chat_id, mode, sequence, step):
                 "message_id": msg.message_id,
                 "remaining": 5,
                 "current_move": (control, attack),
-                "step": step
+                "step": step,
+                "timer_ended": False
             }
         )
         context.user_data["current_timer"] = job
@@ -194,9 +178,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
                 job.schedule_removal()  # Останавливаем таймер
+                timer_ended = job.data.get("timer_ended", False)
                 del context.user_data["current_timer"]
 
-                if context.user_data.get("timer_ended", False):
+                if timer_ended:
                     await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
                     return
 
