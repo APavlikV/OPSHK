@@ -175,7 +175,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mode = context.user_data.get("mode")
         current_message_id = context.user_data.get("last_message_id")
 
-        if sequence and step is not,None and query.message.message_id == current_message_id:
+        if sequence and step is not None and query.message.message_id == current_message_id:
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
                 job.schedule_removal()  # Останавливаем таймер
