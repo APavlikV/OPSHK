@@ -1,247 +1,128 @@
-from telegram.ext import ContextTypes
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard
-from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
-from data import MOVES, DEFENSE_MOVES
 import logging
-from datetime import datetime, timedelta
+from telegram import InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.error import BadRequest
+from telegram.ext import CallbackContext
+
+from .keyboards import get_keyboard_by_step, get_rules_keyboard, get_memo_keyboard, get_hint_keyboard
+from .utils import MOVES, get_correct_answer, get_question_text
 
 logger = logging.getLogger(__name__)
 
-# Кастомная клавиатура для /start
-def get_start_keyboard():
-    keyboard = [["Игра"]]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Получена команда /start")
+def init_user_data_if_empty(context: CallbackContext):
     if context.user_data is None:
         context.user_data = {}
-    await update.message.reply_text(
-        "🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
-        parse_mode="HTML",
-        reply_markup=get_start_keyboard()
-    )
 
-async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Нажата кнопка 'Игра'")
-    if context.user_data is None:
-        context.user_data = {}
-    await update.message.reply_text(
-        "Приветствуем в нашем тотализаторе!\nВыберите режим:",
-        reply_markup=menu_keyboard()
-    )
-
-async def update_timer(context: ContextTypes.DEFAULT_TYPE):
-    job = context.job
-    chat_id = job.data["chat_id"]
-    message_id = job.data["message_id"]
-    remaining = job.data["remaining"] - 1
-    job.data["remaining"] = remaining
-
-    logger.info(f"update_timer: message_id={message_id}, remaining={remaining}")
-
-    try:
-        control, attack = job.data["current_move"]
-        step = job.data["step"]
-        text = (
-            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
-            f"🎯 Контроль: <b>{control}</b>\n"
-            f"💥 Атака: <b>{attack}</b>\n"
-            f"Осталось: {remaining} сек"
-        )
-
-        if remaining > 0:
-            logger.info(f"Editing message {message_id} with remaining={remaining}")
-            try:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-            except BadRequest as e:
-                if "Message to edit not found" in str(e):
-                    logger.info(f"Message {message_id} already deleted, stopping timer")
-                    job.schedule_removal()
-                    return
-                raise
-        else:
-            logger.info(f"Time's up for message {message_id}")
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            job.data["timer_ended"] = True
-            job.schedule_removal()
-    except Exception as e:
-        logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
-        try:
-            job.schedule_removal()
-        except Exception as removal_error:
-            logger.info(f"Job already removed: {removal_error}")
-
-async def show_next_move(context, chat_id, mode, sequence, step):
-    control, attack = sequence[step]
-    text = (
+def build_move_text(step: int, control: str, attack: str, remaining: int) -> str:
+    return (
         f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
         f"🎯 Контроль: <b>{control}</b>\n"
         f"💥 Атака: <b>{attack}</b>\n"
-        f"Осталось: 5 сек"
+        f"Осталось: {remaining} сек"
     )
-    msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-    context.user_data["last_message_id"] = msg.message_id
-    
-    if mode == "timed_fight":
-        logger.info(f"Starting timer for message {msg.message_id}, step {step}")
-        job = context.job_queue.run_repeating(
-            update_timer,
-            interval=1,
-            first=0,
-            data={
-                "chat_id": chat_id,
-                "message_id": msg.message_id,
-                "remaining": 5,
-                "current_move": (control, attack),
-                "step": step,
-                "timer_ended": False
-            }
-        )
-        context.user_data["current_timer"] = job
-    return msg
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def clean_previous_message(context: CallbackContext):
+    message_id = context.user_data.get("message_id")
+    if message_id:
+        try:
+            context.bot.delete_message(chat_id=context.user_data["chat_id"], message_id=message_id)
+        except BadRequest as e:
+            logger.warning("Could not delete message: %s", e)
+        context.user_data.pop("message_id", None)
+
+def handle_rules(query):
+    query.edit_message_text(
+        text="📜 Правила боя:\n\n1. Выбирай сторону защиты.\n2. Угадывай атаку врага.\n3. Успей до окончания таймера!",
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_rules_keyboard()
+    )
+
+def handle_memo(query):
+    query.edit_message_text(
+        text="📕 Памятка по уязвимостям:\n\n🛡️ Сторона защиты зависит от типа атаки.\nИзучи атаки, чтобы лучше угадывать!",
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_memo_keyboard()
+    )
+
+def handle_hint(query, context):
+    step = context.user_data.get("step", 0)
+    if step < len(MOVES):
+        attack = MOVES[step]["attack"]
+        query.answer(text=f"💡 Подсказка: {attack}", show_alert=True)
+    else:
+        query.answer(text="Нет подсказки", show_alert=True)
+
+def handle_fight_start(query, context):
+    context.user_data["step"] = 0
+    context.user_data["score"] = 0
+    context.user_data["sequence"] = MOVES
+    context.user_data["chat_id"] = query.message.chat_id
+
+    step = 0
+    question_data = context.user_data["sequence"][step]
+    question_text = get_question_text(question_data)
+    reply_markup = InlineKeyboardMarkup(get_keyboard_by_step(step))
+
+    query.edit_message_text(
+        text=question_text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML
+    )
+
+def handle_defense_choice(query, context):
+    step = context.user_data.get("step", 0)
+    sequence = context.user_data.get("sequence", MOVES)
+    if step >= len(sequence):
+        query.answer()
+        return
+
+    correct_answer = get_correct_answer(sequence[step])
+    chosen_answer = query.data
+
+    if chosen_answer == correct_answer:
+        context.user_data["score"] += 1
+
+    context.user_data["step"] += 1
+    next_step = context.user_data["step"]
+
+    if next_step >= len(sequence):
+        score = context.user_data.get("score", 0)
+        query.edit_message_text(
+            text=f"✅ Бой завершен!\n\n🏆 Правильных ответов: <b>{score} из {len(sequence)}</b>",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    next_question = sequence[next_step]
+    question_text = get_question_text(next_question)
+    reply_markup = InlineKeyboardMarkup(get_keyboard_by_step(next_step))
+
+    query.edit_message_text(
+        text=question_text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML
+    )
+
+async def button(update: Update, context: CallbackContext):
+    init_user_data_if_empty(context)
+
     query = update.callback_query
     await query.answer()
-    logger.info(f"Нажата кнопка: {query.data}")
-    if context.user_data is None:
-        context.user_data = {}
 
-    if query.data == "rules":
-        await query.edit_message_text(
-            "<b>ПРАВИЛА ИГРЫ</b>\n➖\n"
-            "Добро пожаловать в КАРАТЭ тотализатор! Здесь вы сражаетесь с виртуальным противником <b>Bot Васей</b>. "
-            "Ваша задача — правильно блокировать его атаки и контратаковать.\n\n"
-            "<u>Как устроен поединок:</u>\n"
-            "1. <b>Шаг боя</b>: Противник выбирает <i>Контроль</i> (где он вас держит) и <i>Атаку</i> (куда бьёт).\n"
-            "2. <b>Ваш ход</b>: Вы выбираете один из блоков: Аге уке, Учи уке, Сото уке или Гедан барай.\n"
-            "3. <b>Результат</b>:\n"
-            "   - 🟢 <b>УСПЕХ</b>: если блок отражает контроль и атаку.\n"
-            "   - 🟠 <b>ЧАСТИЧНЫЙ УСПЕХ</b>: если контроль не отбит, но атака заблокирована или наоборот.\n"
-            "   - 🔴 <b>ПОРАЖЕНИЕ</b>: если контроль или атака достигли цели.\n"
-            "4. <b>Лог боя</b>: После хода — краткий и подробный результат.\n\n"
-            "<u>Режимы:</u>\n"
-            "- <b>Простой бой</b>: Без таймера, с подсказками.\n"
-            "- <b>Бой на время</b>: 5 секунд на ход.\n\n"
-            "<u>Цель:</u>\n"
-            "Пройти 9 шагов, набрав максимум очков.",
-            parse_mode="HTML"
-        )
-    elif query.data == "memo":
-        await query.edit_message_text(
-            "<b>🧠 ПАМЯТКА</b>\n➖\n"
-            "<u>👊🏻 Зоны контроля и атаки:</u>\n"
-            "• <b>СС</b> — Чудан (солнечное сплетение)\n"
-            "• <b>ТР</b> — Чудан (трахея)\n"
-            "• <b>ДЗ</b> — Дзедан (голова)\n"
-            "• <b>ГДН</b> — Годан (ниже пояса)\n\n"
-            "<u>🛡️ Блоки:</u>\n"
-            "▫️ <b>Аге уке</b>\n"
-            "   • Защита: СС\n"
-            "   • Контратака: ДЗ / ТР\n"
-            "   • Добивание: ДЗ\n\n"
-            "▫️ <b>Учи уке</b>\n"
-            "   • Защита: СС\n"
-            "   • Контратака: ДЗ / ТР\n"
-            "   • Добивание: ДЗ / ТР / СС\n\n"
-            "▫️ <b>Сото уке</b>\n"
-            "   • Защита: ТР\n"
-            "   • Контратака: ДЗ / СС\n"
-            "   • Добивание: ДЗ / ТР / СС\n\n"
-            "▫️ <b>Гедан барай</b>\n"
-            "   • Защита: ДЗ\n"
-            "   • Контратака: ТР / СС\n"
-            "   • Добивание: ТР / СС / ГДН",
-            parse_mode="HTML"
-        )
-    elif query.data == "karate_arena":
-        await query.edit_message_text("Арена: Пока в разработке!")
-    elif query.data == "training_fight":
-        await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
-    elif query.data in ["simple_fight", "timed_fight"]:
-        context.user_data["fight_sequence"] = generate_fight_sequence()
-        context.user_data["current_step"] = 0
-        context.user_data["correct_count"] = 0
-        context.user_data["control_count"] = 0
-        context.user_data["hint_count"] = 0
-        context.user_data["mode"] = query.data
-        context.user_data["timer_ended"] = False
-        await show_next_move(context, query.message.chat_id, query.data, context.user_data["fight_sequence"], 0)
-        try:
-            await query.delete_message()
-        except Exception as e:
-            logger.error(f"Ошибка удаления сообщения при старте: {e}")
-    elif query.data == "hint" and context.user_data.get("mode") == "simple_fight":
-        sequence = context.user_data.get("fight_sequence")
-        step = context.user_data.get("current_step")
-        if sequence and step is not None:
-            control, attack = sequence[step]
-            _, _, correct_answer = check_move(control, attack, "")
-            context.user_data["hint_count"] += 1
-            await query.edit_message_text(
-                f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
-                f"🎯 Контроль: <b>{control}</b>\n"
-                f"💥 Атака: <b>{attack}</b>\n"
-                f"<b><i>🛡️ Правильный блок: {correct_answer}</i></b>",
-                reply_markup=answer_keyboard(send_hint=True),
-                parse_mode="HTML"
-            )
-    elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
-        sequence = context.user_data.get("fight_sequence")
-        step = context.user_data.get("current_step")
-        mode = context.user_data.get("mode")
-        current_message_id = context.user_data.get("last_message_id")
+    data = query.data
 
-        if sequence and step is not None and query.message.message_id == current_message_id:
-            if mode == "timed_fight" and "current_timer" in context.user_data:
-                job = context.user_data["current_timer"]
-                job.schedule_removal()
-                timer_ended = job.data.get("timer_ended", False)
-                del context.user_data["current_timer"]
+    if data == "rules":
+        handle_rules(query)
 
-                if timer_ended:
-                    await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
-                    return
+    elif data == "memo":
+        handle_memo(query)
 
-            try:
-                await query.delete_message()
-            except BadRequest as e:
-                if "Message to delete not found" in str(e):
-                    logger.info(f"Message {query.message.message_id} already deleted, skipping")
-                else:
-                    logger.error(f"Ошибка удаления сообщения: {e}")
+    elif data == "hint":
+        handle_hint(query, context)
 
-            control, attack = sequence[step]
-            chosen_defense = query.data
-            is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
-            
-            short_log = generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer)
-            short_msg = await query.message.reply_text(short_log, parse_mode="HTML")
-            
-            detailed_log = generate_detailed_log(control, attack, chosen_defense, is_success)
-            await query.message.reply_text(detailed_log, parse_mode="HTML", reply_to_message_id=short_msg.message_id)
-            
-            if is_success:
-                context.user_data["correct_count"] += 1
-            if control == DEFENSE_MOVES[chosen_defense]["control"]:
-                context.user_data["control_count"] += 1
+    elif data == "fight":
+        handle_fight_start(query, context)
 
-            if step >= len(sequence) - 1:
-                await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
-                final_stats = generate_final_stats(
-                    context.user_data["correct_count"],
-                    context.user_data["control_count"],
-                    context.user_data.get("hint_count", 0),
-                    len(MOVES)
-                )
-                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())  # Возвращаем клавиатуру
-                logger.info("Бой успешно завершён")
-                context.user_data.clear()
-            else:
-                context.user_data["current_step"] += 1
-                await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
-        else:
-            logger.info(f"Клик не соответствует текущему шагу {step} или сообщению {current_message_id}, игнорируем")
+    else:
+        handle_defense_choice(query, context)
+
