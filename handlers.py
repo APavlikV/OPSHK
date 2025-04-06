@@ -78,7 +78,7 @@ async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
     if mode == "timed_fight":
         text = (
-            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
+            f"<code>⚔️ Раунд {step + 1} из {len(MOVES)}</code>\n\n"
             f"🎯 Контроль: <b>{control}</b>\n"
             f"💥 Атака: <b>{attack}</b>\n"
             f"Осталось: 5 сек"
