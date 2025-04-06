@@ -7,7 +7,7 @@ services:
     plan: free
     buildCommand: |
       python3.9 -m venv .venv
-      .venv/bin/python3.9 -m venv .venv && .venv/bin/python3.9 -m pip install --upgrade pip && .venv/bin/pip install -r requirements.txt
+      .venv/bin/python3.9 -m pip install --upgrade pip
       .venv/bin/pip install -r requirements.txt
     startCommand: "python main.py"
     repo: https://github.com/APavlikV/OPSHK
