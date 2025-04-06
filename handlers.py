@@ -1,22 +1,37 @@
 from telegram.ext import ContextTypes
-from telegram import Update
-from keyboards import start_keyboard, menu_keyboard, training_mode_keyboard, answer_keyboard
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
 from datetime import datetime, timedelta
+from telegram.error import BadRequest
 
 logger = logging.getLogger(__name__)
 
+# Кастомная клавиатура для /start
+def get_start_keyboard():
+    keyboard = [["Игра"]]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
-    await update.message.reply_text("🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
-    parse_mode="HTML",
-    reply_markup=start_keyboard())
+    if context.user_data is None:
+        context.user_data = {}
+    await update.message.reply_text(
+        "🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
+        parse_mode="HTML",
+        reply_markup=get_start_keyboard()  # Только кастомная клавиатура
+    )
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
-    await update.message.reply_text("Приветствуем в нашем тотализаторе!\nВыберите режим:", reply_markup=menu_keyboard())
+    if context.user_data is None:
+        context.user_data = {}
+    await update.message.reply_text(
+        "Приветствуем в нашем тотализаторе!\nВыберите режим:",
+        reply_markup=menu_keyboard()  # Инлайн-клавиатура для режимов
+    )
 
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
@@ -25,33 +40,75 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
 
-    if not job.data.get("is_active", True):
-        return  # Выходим, если таймер неактивен
+    logger.info(f"update_timer: message_id={message_id}, remaining={remaining}")
 
     try:
         control, attack = job.data["current_move"]
         step = job.data["step"]
         text = (
-            f"<code>⚔️ Шаг {step} из {len(MOVES)}</code>\n\n"
+            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
             f"🎯 Контроль: <b>{control}</b>\n"
             f"💥 Атака: <b>{attack}</b>\n"
             f"Осталось: {remaining} сек"
         )
 
         if remaining > 0:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            logger.info(f"Editing message {message_id} with remaining={remaining}")
+            try:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            except BadRequest as e:
+                if "Message to edit not found" in str(e):
+                    logger.info(f"Message {message_id} already deleted, stopping timer")
+                    job.schedule_removal()
+                    return
+                raise
         else:
+            logger.info(f"Time's up for message {message_id}")
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            job.data["is_active"] = False
+            job.data["timer_ended"] = True
             job.schedule_removal()
-            context.user_data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
+        try:
+            job.schedule_removal()
+        except Exception as removal_error:
+            logger.info(f"Job already removed: {removal_error}")
+
+async def show_next_move(context, chat_id, mode, sequence, step):
+    control, attack = sequence[step]
+    text = (
+        f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
+        f"🎯 Контроль: <b>{control}</b>\n"
+        f"💥 Атака: <b>{attack}</b>\n"
+        f"Осталось: 5 сек"
+    )
+    msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+    context.user_data["last_message_id"] = msg.message_id
+    
+    if mode == "timed_fight":
+        logger.info(f"Starting timer for message {msg.message_id}, step {step}")
+        job = context.job_queue.run_repeating(
+            update_timer,
+            interval=1,
+            first=0,
+            data={
+                "chat_id": chat_id,
+                "message_id": msg.message_id,
+                "remaining": 5,
+                "current_move": (control, attack),
+                "step": step,
+                "timer_ended": False
+            }
+        )
+        context.user_data["current_timer"] = job
+    return msg
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     logger.info(f"Нажата кнопка: {query.data}")
+    if context.user_data is None:
+        context.user_data = {}
 
     if query.data == "rules":
         await query.edit_message_text(
@@ -75,32 +132,31 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif query.data == "memo":
         await query.edit_message_text(
-    "<b>🧠 ПАМЯТКА</b>\n➖\n"
-    "<u>👊🏻 Зоны контроля и атаки:</u>\n"
-    "• <b>СС</b> — Чудан (солнечное сплетение)\n"
-    "• <b>ТР</b> — Чудан (трахея)\n"
-    "• <b>ДЗ</b> — Дзедан (голова)\n"
-    "• <b>ГДН</b> — Годан (ниже пояса)\n\n"
-    "<u>🛡️ Блоки:</u>\n"
-    "▫️ <b>Аге уке</b>\n"
-    "   • Защита: СС\n"
-    "   • Контратака: ДЗ / ТР\n"
-    "   • Добивание: ДЗ\n\n"
-    "▫️ <b>Учи уке</b>\n"
-    "   • Защита: СС\n"
-    "   • Контратака: ДЗ / ТР\n"
-    "   • Добивание: ДЗ / ТР / СС\n\n"
-    "▫️ <b>Сото уке</b>\n"
-    "   • Защита: ТР\n"
-    "   • Контратака: ДЗ / СС\n"
-    "   • Добивание: ДЗ / ТР / СС\n\n"
-    "▫️ <b>Гедан барай</b>\n"
-    "   • Защита: ДЗ\n"
-    "   • Контратака: ТР / СС\n"
-    "   • Добивание: ТР / СС / ГДН",
-    parse_mode="HTML"
-)
-
+            "<b>🧠 ПАМЯТКА</b>\n➖\n"
+            "<u>👊🏻 Зоны контроля и атаки:</u>\n"
+            "• <b>СС</b> — Чудан (солнечное сплетение)\n"
+            "• <b>ТР</b> — Чудан (трахея)\n"
+            "• <b>ДЗ</b> — Дзедан (голова)\n"
+            "• <b>ГДН</b> — Годан (ниже пояса)\n\n"
+            "<u>🛡️ Блоки:</u>\n"
+            "▫️ <b>Аге уке</b>\n"
+            "   • Защита: СС\n"
+            "   • Контратака: ДЗ / ТР\n"
+            "   • Добивание: ДЗ\n\n"
+            "▫️ <b>Учи уке</b>\n"
+            "   • Защита: СС\n"
+            "   • Контратака: ДЗ / ТР\n"
+            "   • Добивание: ДЗ / ТР / СС\n\n"
+            "▫️ <b>Сото уке</b>\n"
+            "   • Защита: ТР\n"
+            "   • Контратака: ДЗ / СС\n"
+            "   • Добивание: ДЗ / ТР / СС\n\n"
+            "▫️ <b>Гедан барай</b>\n"
+            "   • Защита: ДЗ\n"
+            "   • Контратака: ТР / СС\n"
+            "   • Добивание: ТР / СС / ГДН",
+            parse_mode="HTML"
+        )
     elif query.data == "karate_arena":
         await query.edit_message_text("Арена: Пока в разработке!")
     elif query.data == "training_fight":
@@ -113,33 +169,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["hint_count"] = 0
         context.user_data["mode"] = query.data
         context.user_data["timer_ended"] = False
-
-        control, attack = context.user_data["fight_sequence"][0]
-        text = (
-            f"<code>⚔️ Шаг 1 из {len(MOVES)}</code>\n\n"
-            f"🎯 Контроль: <b>{control}</b>\n"
-            f"💥 Атака: <b>{attack}</b>"
-        )
-        if query.data == "timed_fight":
-            text += "\nОсталось: 5 сек"
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
-            job = context.job_queue.run_repeating(
-                update_timer,
-                interval=1,
-                first=0,
-                data={
-                    "chat_id": query.message.chat_id,
-                    "message_id": msg.message_id,
-                    "remaining": 5,
-                    "current_move": (control, attack),
-                    "step": 1,
-                    "is_active": True
-                }
-            )
-            context.user_data["current_timer"] = job
-        else:
-            msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
-        context.user_data["last_message_id"] = msg.message_id
+        await show_next_move(context, query.message.chat_id, query.data, context.user_data["fight_sequence"], 0)
         try:
             await query.delete_message()
         except Exception as e:
@@ -166,25 +196,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_message_id = context.user_data.get("last_message_id")
 
         if sequence and step is not None and query.message.message_id == current_message_id:
-            if context.user_data.get("timer_ended", False):
-                await query.message.reply_text("Время вышло! Вы проиграли.", parse_mode="HTML")
-                return
-
-            # Останавливаем таймер
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
-                job.data["is_active"] = False
                 job.schedule_removal()
-                logger.info(f"Stopped timer {job.id}")
+                timer_ended = job.data.get("timer_ended", False)
                 del context.user_data["current_timer"]
 
-            # Удаляем текущее сообщение
+                if timer_ended:
+                    await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
+                    return
+
             try:
                 await query.delete_message()
-            except Exception as e:
-                logger.error(f"Ошибка удаления сообщения: {e}")
+            except BadRequest as e:
+                if "Message to delete not found" in str(e):
+                    logger.info(f"Message {query.message.message_id} already deleted, skipping")
+                else:
+                    logger.error(f"Ошибка удаления сообщения: {e}")
 
-            # Обрабатываем текущий шаг
             control, attack = sequence[step]
             chosen_defense = query.data
             is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
@@ -200,7 +229,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if control == DEFENSE_MOVES[chosen_defense]["control"]:
                 context.user_data["control_count"] += 1
 
-            # Проверяем, закончен ли бой
             if step >= len(sequence) - 1:
                 await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
                 final_stats = generate_final_stats(
@@ -209,37 +237,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data.get("hint_count", 0),
                     len(MOVES)
                 )
-                await query.message.reply_text(final_stats, parse_mode="HTML")
+                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())  # Возвращаем клавиатуру
                 logger.info("Бой успешно завершён")
+                context.user_data.clear()
             else:
-                step += 1
-                context.user_data["current_step"] = step
-                control, attack = sequence[step]
-                text = (
-                    f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
-                    f"🎯 Контроль: <b>{control}</b>\n"
-                    f"💥 Атака: <b>{attack}</b>"
-                )
-                if mode == "timed_fight":
-                    text += "\nОсталось: 5 сек"
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(), parse_mode="HTML")
-                    job = context.job_queue.run_repeating(
-                        update_timer,
-                        interval=1,
-                        first=0,
-                        data={
-                            "chat_id": query.message.chat_id,
-                            "message_id": msg.message_id,
-                            "remaining": 5,
-                            "current_move": (control, attack),
-                            "step": step + 1,
-                            "is_active": True
-                        }
-                    )
-                    context.user_data["current_timer"] = job
-                else:
-                    msg = await query.message.reply_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
-                context.user_data["last_message_id"] = msg.message_id
-        else:
-            logger.info(f"Клик не соответствует текущему шагу {step} или сообщению {current_message_id}, игнорируем")
-
+                context.user_data["current_step"] += 1
+                await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
+    else:
+        logger.info(f"Неизвестная кнопка: {query.data}")
