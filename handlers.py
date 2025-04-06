@@ -30,14 +30,6 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job.data["remaining"] = remaining
 
     try:
-        # Проверяем актуальность сообщения и шага
-        last_message_id = job.data.get("last_message_id")
-        step_completed = job.data.get("step_completed", False)
-        if last_message_id != message_id or step_completed:
-            logger.info(f"Message {message_id} is outdated or step completed, stopping timer")
-            context.job_queue.remove_job(job.id)  # Мгновенная остановка
-            return
-
         control, attack = job.data["current_move"]
         step = job.data["step"]
         text = (
@@ -50,27 +42,24 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         if remaining > 0:
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
         elif remaining <= 0:
-            job.data["timer_end_time"] = datetime.utcnow()
-            if "answer_time" not in job.data:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-                job.data["timer_ended"] = True
-            context.job_queue.remove_job(job.id)  # Мгновенная остановка
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
+            job.schedule_removal()  # Завершаем таймер
+            context.user_data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
-        context.job_queue.remove_job(job.id)  # Остановка в случае ошибки
+        job.schedule_removal()  # Завершаем таймер при ошибке
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
     text = (
         f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
         f"🎯 Контроль: <b>{control}</b>\n"
-        f"💥 Атака: <b>{attack}</b>"
+        f"💥 Атака: <b>{attack}</b>\n"
+        f"Осталось: 5 сек"
     )
+    msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+    
     if mode == "timed_fight":
-        text += "\nОсталось: 5 сек"
-        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
-        start_time = datetime.utcnow()
-        timer_end_time = start_time + timedelta(seconds=5)
         job = context.job_queue.run_repeating(
             update_timer,
             interval=1,
@@ -80,17 +69,10 @@ async def show_next_move(context, chat_id, mode, sequence, step):
                 "message_id": msg.message_id,
                 "remaining": 5,
                 "current_move": (control, attack),
-                "step": step,
-                "timer_end_time": timer_end_time,
-                "answer_time": None,
-                "last_message_id": msg.message_id,
-                "timer_ended": False,
-                "step_completed": False
+                "step": step
             }
         )
         context.user_data["current_timer"] = job
-    else:
-        msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
     context.user_data["last_message_id"] = msg.message_id
     return msg
 
@@ -189,28 +171,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if sequence and step is not None and query.message.message_id == current_message_id:
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
-                job.data["answer_time"] = datetime.utcnow()  # Фиксируем время ответа
-                
-                # Ждём завершения таймера, если он ещё не готов
-                if "timer_end_time" not in job.data:
-                    logger.info(f"Waiting for timer to end for step {step}")
-                    return
-                
-                timer_end_time = job.data["timer_end_time"]
-                answer_time = job.data["answer_time"]
-
-                # Помечаем шаг как завершённый и мгновенно останавливаем таймер
-                job.data["step_completed"] = True
-                context.job_queue.remove_job(job.id)  # Мгновенная остановка
+                job.schedule_removal()  # Останавливаем таймер сразу
                 del context.user_data["current_timer"]
 
-                # Проверяем время
-                if answer_time >= timer_end_time or job.data.get("timer_ended", False):
+                if context.user_data.get("timer_ended", False):
                     await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
-                    context.user_data["timer_ended"] = True
                     return
 
-            # Удаляем сообщение после остановки таймера
+            # Удаляем сообщение
             try:
                 await query.delete_message()
             except Exception as e:
