@@ -29,6 +29,13 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
 
+    # Проверяем, актуально ли сообщение
+    current_message_id = context.user_data.get("last_message_id")
+    if current_message_id != message_id:
+        logger.info(f"Message {message_id} is outdated, stopping timer")
+        job.schedule_removal()
+        return
+
     try:
         control, attack = job.data["current_move"]
         step = job.data["step"]
@@ -43,11 +50,11 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
         elif remaining <= 0:
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
-            job.schedule_removal()  # Завершаем таймер
+            job.schedule_removal()
             context.user_data["timer_ended"] = True
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
-        job.schedule_removal()  # Завершаем таймер при ошибке
+        job.schedule_removal()
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
@@ -168,10 +175,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mode = context.user_data.get("mode")
         current_message_id = context.user_data.get("last_message_id")
 
-        if sequence and step is not None and query.message.message_id == current_message_id:
+        if sequence and step is not,None and query.message.message_id == current_message_id:
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
-                job.schedule_removal()  # Останавливаем таймер сразу
+                job.schedule_removal()  # Останавливаем таймер
                 del context.user_data["current_timer"]
 
                 if context.user_data.get("timer_ended", False):
