@@ -1,4 +1,4 @@
-rom telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 def start_keyboard():
     keyboard = [
