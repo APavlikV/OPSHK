@@ -85,7 +85,7 @@ async def show_next_move(context, chat_id, mode, sequence, step):
         )
     else:  # simple_fight
         text = (
-            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
+            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
             f"🎯 Контроль: <b>{control}</b>\n"
             f"💥 Атака: <b>{attack}</b>"
         )
