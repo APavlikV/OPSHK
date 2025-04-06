@@ -5,6 +5,7 @@ from game_logic import generate_fight_sequence, check_move, generate_short_log, 
 from data import MOVES, DEFENSE_MOVES
 import logging
 from datetime import datetime, timedelta
+from telegram.error import BadRequest
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +44,26 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
 
         if remaining > 0:
             logger.info(f"Editing message {message_id} with remaining={remaining}")
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            # Проверяем, существует ли сообщение
+            try:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            except BadRequest as e:
+                if "Message to edit not found" in str(e):
+                    logger.info(f"Message {message_id} already deleted, stopping timer")
+                    job.schedule_removal()
+                    return
+                raise
         else:
             logger.info(f"Time's up for message {message_id}")
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
+            job.data["timer_ended"] = True
             job.schedule_removal()
-            job.data["timer_ended"] = True  # Флаг для проверки в button
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
-        job.schedule_removal()
+        try:
+            job.schedule_removal()
+        except Exception as removal_error:
+            logger.info(f"Job already removed: {removal_error}")
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
