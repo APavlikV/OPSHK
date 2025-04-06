@@ -1,6 +1,6 @@
 from telegram.ext import ContextTypes
-from telegram import Update
-from keyboards import start_keyboard, menu_keyboard, training_mode_keyboard, answer_keyboard
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard  # Предполагаем, что start_keyboard уберём
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
@@ -9,19 +9,29 @@ from telegram.error import BadRequest
 
 logger = logging.getLogger(__name__)
 
+# Определяем кастомную клавиатуру для /start
+def get_start_keyboard():
+    keyboard = [["Игра"]]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, persistent=True, one_time_keyboard=False)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
     if context.user_data is None:
         context.user_data = {}
-    await update.message.reply_text("🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
-    parse_mode="HTML",
-    reply_markup=start_keyboard())
+    await update.message.reply_text(
+        "🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
+        parse_mode="HTML",
+        reply_markup=get_start_keyboard()
+    )
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
     if context.user_data is None:
         context.user_data = {}
-    await update.message.reply_text("Приветствуем в нашем тотализаторе!\nВыберите режим:", reply_markup=menu_keyboard())
+    await update.message.reply_text(
+        "Приветствуем в нашем тотализаторе!\nВыберите режим:",
+        reply_markup=menu_keyboard()  # Оставляем инлайн-клавиатуру для режимов
+    )
 
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
@@ -196,7 +206,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
                     return
 
-            # Удаляем сообщение, только если оно ещё существует
             try:
                 await query.delete_message()
             except BadRequest as e:
@@ -205,7 +214,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     logger.error(f"Ошибка удаления сообщения: {e}")
 
-            # Обрабатываем шаг
             control, attack = sequence[step]
             chosen_defense = query.data
             is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
@@ -221,7 +229,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if control == DEFENSE_MOVES[chosen_defense]["control"]:
                 context.user_data["control_count"] += 1
 
-            # Проверяем, закончен ли бой
             if step >= len(sequence) - 1:
                 await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
                 final_stats = generate_final_stats(
@@ -232,7 +239,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 await query.message.reply_text(final_stats, parse_mode="HTML")
                 logger.info("Бой успешно завершён")
-                # Очищаем состояние, чтобы предотвратить повторные вызовы
                 context.user_data.clear()
             else:
                 context.user_data["current_step"] += 1
