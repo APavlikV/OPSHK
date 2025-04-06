@@ -1,2 +1,2 @@
 python-telegram-bot[job-queue,webhooks]>=20.8
-
+pip>=25.0.1  # Явно требуем новую версию pip
