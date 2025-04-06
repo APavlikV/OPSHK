@@ -21,7 +21,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
         parse_mode="HTML",
-        reply_markup=get_start_keyboard()  # Только кастомная клавиатура
+        reply_markup=get_start_keyboard()
     )
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -30,7 +30,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data = {}
     await update.message.reply_text(
         "Приветствуем в нашем тотализаторе!\nВыберите режим:",
-        reply_markup=menu_keyboard()  # Инлайн-клавиатура для режимов
+        reply_markup=menu_keyboard()
     )
 
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
@@ -76,13 +76,23 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
-    text = (
-        f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
-        f"🎯 Контроль: <b>{control}</b>\n"
-        f"💥 Атака: <b>{attack}</b>\n"
-        f"Осталось: 5 сек"
-    )
-    msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+    if mode == "timed_fight":
+        text = (
+            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>\n"
+            f"Осталось: 5 сек"
+        )
+    else:  # simple_fight
+        text = (
+            f"<code>⚔️ Шаг {step + 1} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>"
+        )
+    
+    # Добавляем кнопку "Подсказка" только для simple_fight
+    reply_markup = answer_keyboard(send_hint=(mode == "simple_fight"))
+    msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML")
     context.user_data["last_message_id"] = msg.message_id
     
     if mode == "timed_fight":
@@ -237,7 +247,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data.get("hint_count", 0),
                     len(MOVES)
                 )
-                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())  # Возвращаем клавиатуру
+                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())
                 logger.info("Бой успешно завершён")
                 context.user_data.clear()
             else:
