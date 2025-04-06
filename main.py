@@ -1,53 +1,79 @@
 import os
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-from telegram.request import HTTPXRequest
 import logging
 import asyncio
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+)
+from telegram.request import HTTPXRequest
 from handlers import start, game, button
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- Глобальный логгер ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
+
+# --- Получение и проверка переменных окружения ---
+def get_env_variable(name: str, required: bool = True, default=None):
+    value = os.getenv(name, default)
+    if required and not value:
+        logger.error(f"Переменная окружения '{name}' не задана!")
+        raise EnvironmentError(f"{name} not set")
+    return value
+
+
+# --- Основная асинхронная точка запуска ---
 async def main():
-    logger.info("Запуск бота...")
-    token = os.getenv("TELEGRAM_TOKEN")
-    if not token:
-        logger.error("TELEGRAM_TOKEN не задан!")
-        return
+    logger.info("🚀 Запуск Telegram-бота...")
 
-    hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-    if not hostname:
-        logger.error("RENDER_EXTERNAL_HOSTNAME не задан!")
-        return
+    # Получаем переменные окружения
+    token = get_env_variable("TELEGRAM_TOKEN")
+    hostname = get_env_variable("RENDER_EXTERNAL_HOSTNAME")
+    port = int(os.getenv("PORT", "10000"))
 
-    port = int(os.environ.get("PORT", 10000))
-    logger.info(f"Используется порт: {port}")
-
+    # Настройка HTTP-запросов
     request = HTTPXRequest(read_timeout=60, connect_timeout=60)
+
+    # Инициализация приложения
     app = Application.builder().token(token).request(request).build()
 
-    # Регистрируем обработчики команд и кнопок
+    # Регистрируем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
 
+    # Настройка вебхука
     webhook_url = f"https://{hostname}/{token}"
-    logger.info(f"Настройка вебхука: {webhook_url}")
+    logger.info(f"🌐 Установка webhook: {webhook_url}")
 
     await app.initialize()
-    logger.info("Приложение инициализировано")
     await app.start()
-    logger.info("Приложение запущено")
     await app.updater.start_webhook(
         listen="0.0.0.0",
         port=port,
         url_path=token,
         webhook_url=webhook_url
     )
-    logger.info(f"Вебхук запущен на порту {port}")
 
-    while True:
-        await asyncio.sleep(3600)
+    logger.info(f"✅ Вебхук активен на порту {port}")
 
+    # Поддержка живого цикла
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("🛑 Остановка бота...")
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+
+
+# --- Запуск ---
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.exception(f"❌ Ошибка при запуске бота: {e}")
