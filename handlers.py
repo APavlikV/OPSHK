@@ -1,6 +1,6 @@
 from telegram.ext import ContextTypes
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard  # Предполагаем, что start_keyboard уберём
+from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
@@ -9,10 +9,10 @@ from telegram.error import BadRequest
 
 logger = logging.getLogger(__name__)
 
-# Определяем кастомную клавиатуру для /start
+# Кастомная клавиатура для /start
 def get_start_keyboard():
     keyboard = [["Игра"]]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, persistent=True, one_time_keyboard=False)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
@@ -30,7 +30,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data = {}
     await update.message.reply_text(
         "Приветствуем в нашем тотализаторе!\nВыберите режим:",
-        reply_markup=menu_keyboard()  # Оставляем инлайн-клавиатуру для режимов
+        reply_markup=menu_keyboard()
     )
 
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
@@ -237,7 +237,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data.get("hint_count", 0),
                     len(MOVES)
                 )
-                await query.message.reply_text(final_stats, parse_mode="HTML")
+                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())  # Возвращаем клавиатуру
                 logger.info("Бой успешно завершён")
                 context.user_data.clear()
             else:
