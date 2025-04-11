@@ -120,8 +120,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["timer_ended"] = False
         await show_next_move(context, query.message.chat_id, query.data, context.user_data["fight_sequence"], 0)
         await query.delete_message()
+    elif query.data == "hint":
+        sequence = context.user_data.get("fight_sequence")
+        step = context.user_data.get("current_step")
+        mode = context.user_data.get("mode")
+        current_message_id = context.user_data.get("last_message_id")
+        if mode == "simple_fight" and sequence and step is not None and query.message.message_id == current_message_id:
+            control, attack = sequence[step]
+            is_success, partial_success, correct_answer = check_move(control, attack, "Аге уке")  # Проверяем любой блок для correct_answer
+            hint_text = f"💡 Правильно: 🛡 {correct_answer}"
+            await query.message.reply_text(hint_text, parse_mode="HTML")
+            context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
     elif query.data == "pvp_bot":
         await query.edit_message_text("Бой с ботом: выберите действие:", reply_markup=pvp_bot_keyboard())
+
     elif query.data == "pvp_rules":
         await query.edit_message_text(
             "<b>ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА</b>\n➖\n"
