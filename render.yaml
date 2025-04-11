@@ -8,6 +8,6 @@ services:
       python3.9 -m venv .venv  # Создаём новое
       .venv/bin/python3.9 -m pip install --upgrade pip  # Обновляем pip
       .venv/bin/pip install --no-cache-dir -r requirements.txt  # Устанавливаем без кэша
-    startCommand: "python main.py"
+    startCommand: "python trainer/main.py"
     repo: https://github.com/APavlikV/OPSHK
     branch: main
