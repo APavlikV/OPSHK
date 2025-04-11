@@ -127,13 +127,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_message_id = context.user_data.get("last_message_id")
         if mode == "simple_fight" and sequence and step is not None and query.message.message_id == current_message_id:
             control, attack = sequence[step]
-            is_success, partial_success, correct_answer = check_move(control, attack, "Аге уке")  # Проверяем любой блок для correct_answer
-            hint_text = f"💡 Правильно: 🛡 {correct_answer}"
-            await query.message.reply_text(hint_text, parse_mode="HTML")
+            is_success, partial_success, correct_answer = check_move(control, attack, "Аге уке")
+            text = (
+                f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
+                f"🎯 Контроль: <b>{control}</b>\n"
+                f"💥 Атака: <b>{attack}</b>\n"
+                f"💡 Правильно: 🛡 {correct_answer}"
+            )
+            await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ... (до PvP код остаётся без изменений)
+
     elif query.data == "pvp_bot":
         await query.edit_message_text("Бой с ботом: выберите действие:", reply_markup=pvp_bot_keyboard())
-
     elif query.data == "pvp_rules":
         await query.edit_message_text(
             "<b>ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА</b>\n➖\n"
@@ -162,32 +170,32 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
         context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
         await query.edit_message_text(
-            "Выберите контроль и атаку:\n1. Контроль (верхняя строка)\n2. Атака (нижняя строка)",
+            "Совершите атаку!\n1. Выберите уровень контроля",
             reply_markup=pvp_attack_keyboard()
         )
     elif query.data.startswith("attack_control_"):
         context.user_data["player_control"] = query.data.split("_")[2]
-        if context.user_data["player_attack"]:
-            await query.edit_message_text(
-                f"Ваш ход: Контроль {context.user_data['player_control']}, Атака {context.user_data['player_attack']}\nВыберите защиту:",
-                reply_markup=answer_keyboard()
-            )
-        else:
-            await query.edit_message_text("Теперь выберите атаку (нижняя строка):", reply_markup=pvp_attack_keyboard())
+        await query.edit_message_text(
+            "Завершите атаку!\n2. Выберите уровень атаки",
+            reply_markup=pvp_attack_keyboard()
+        )
     elif query.data.startswith("attack_hit_"):
         context.user_data["player_attack"] = query.data.split("_")[2]
-        if context.user_data["player_control"]:
-            await query.edit_message_text(
-                f"Ваш ход: Контроль {context.user_data['player_control']}, Атака {context.user_data['player_attack']}\nВыберите защиту:",
-                reply_markup=answer_keyboard()
-            )
-        else:
-            await query.edit_message_text("Сначала выберите контроль (верхняя строка):", reply_markup=pvp_attack_keyboard())
+        await query.edit_message_text(
+            f"Ваша атака: Контроль {context.user_data['player_control']}, Атака {context.user_data['player_attack']}\nВыберите защиту:",
+            reply_markup=answer_keyboard()
+        )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"] and "pvp_mode" in context.user_data:
         context.user_data["player_defense"] = query.data
         await query.edit_message_text(
-            f"Ваш ход: Контроль {context.user_data['player_control']}, Атака {context.user_data['player_attack']}, Защита {context.user_data['player_defense']}\nПодтвердите:",
-            reply_markup=pvp_move_keyboard()
+            f"Ваш ход\n"
+            f"👊🏻Атака:\n"
+            f"<i>Контроль</i> <b>{context.user_data['player_control']}</b>,\n"
+            f"<i>Атака</i> <b>{context.user_data['player_attack']}</b>\n"
+            f"🛡 Защита: <b>{context.user_data['player_defense']}</b>\n"
+            f"Подтвердите:",
+            reply_markup=pvp_move_keyboard(),
+            parse_mode="HTML"
         )
     elif query.data == "pvp_move":
         player_control = context.user_data["player_control"]
@@ -256,10 +264,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["player_defense"] = None
             context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
             context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
-            await query.message.reply_text(
-                "Выберите контроль и атаку для следующей схватки:",
+            await query.edit_message_text(
+                "Совершите атаку!\n1. Выберите уровень контроля",
                 reply_markup=pvp_attack_keyboard()
             )
+    # ... (остальной код для защиты остаётся без изменений)
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         sequence = context.user_data.get("fight_sequence")
         step = context.user_data.get("current_step")
