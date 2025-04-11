@@ -1,1 +1,1 @@
-web: python main.py
+web: python trainer/main.py
