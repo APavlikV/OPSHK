@@ -4,10 +4,10 @@ services:
     env: python
     plan: free
     buildCommand: |
-      rm -rf .venv  # Очищаем старое окружение
-      python3.9 -m venv .venv  # Создаём новое
-      .venv/bin/python3.9 -m pip install --upgrade pip  # Обновляем pip
-      .venv/bin/pip install --no-cache-dir -r requirements.txt  # Устанавливаем без кэша
+      rm -rf .venv
+      python3.9 -m venv .venv
+      .venv/bin/python3.9 -m pip install --upgrade pip
+      .venv/bin/pip install --no-cache-dir -r requirements.txt
     startCommand: "python trainer/main.py"
     repo: https://github.com/APavlikV/OPSHK
     branch: main
