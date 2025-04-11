@@ -4,7 +4,6 @@ from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard, pv
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
-from datetime import datetime, timedelta
 from telegram.error import BadRequest
 import random
 
@@ -140,10 +139,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (до PvP код остаётся без изменений)
-
     elif query.data == "pvp_bot":
         await query.edit_message_text("Бой с ботом: выберите действие:", reply_markup=pvp_bot_keyboard())
     elif query.data == "pvp_rules":
@@ -272,7 +267,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Совершите атаку!\n1. Выберите уровень контроля",
                 reply_markup=pvp_attack_keyboard()
             )
-    # ... (остальной код для защиты остаётся без изменений)
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         sequence = context.user_data.get("fight_sequence")
         step = context.user_data.get("current_step")
