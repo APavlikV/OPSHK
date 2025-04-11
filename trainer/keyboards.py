@@ -35,15 +35,17 @@ def pvp_attack_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 def answer_keyboard(send_hint=False):
     keyboard = [
         [InlineKeyboardButton("Аге уке", callback_data="Аге уке"),
-         InlineKeyboardButton("Учи уке", callback_data="Учи уке")],
-        [InlineKeyboardButton("Сото уке", callback_data="Сото уке"),
+         InlineKeyboardButton("Сото уке", callback_data="Сото уке")],
+        [InlineKeyboardButton("Учи уке", callback_data="Учи уке"),
          InlineKeyboardButton("Гедан барай", callback_data="Гедан барай")]
     ]
     if send_hint:
-        keyboard.append([InlineKeyboardButton("Подсказка", callback_data="hint")])
+        keyboard.append([InlineKeyboardButton("💡Подсказка", callback_data="hint")])
     return InlineKeyboardMarkup(keyboard)
 
 def pvp_move_keyboard():
