@@ -1,8 +1,8 @@
 from telegram.ext import ContextTypes
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from trainer.keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard
-from trainer.game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
-from trainer.data import MOVES, DEFENSE_MOVES
+from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard
+from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
+from data import MOVES, DEFENSE_MOVES
 import logging
 from datetime import datetime, timedelta
 from telegram.error import BadRequest
