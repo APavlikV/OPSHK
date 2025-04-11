@@ -36,6 +36,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     if not job.data.get("active", True):
+        job.schedule_removal()
         return
     chat_id = job.data["chat_id"]
     message_id = job.data["message_id"]
@@ -60,12 +61,15 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             )
             job.data["timer_ended"] = True
             job.data["active"] = False
+            job.schedule_removal()
     except BadRequest as e:
         logger.info(f"Сообщение не найдено для редактирования: {e}")
         job.data["active"] = False
+        job.schedule_removal()
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
         job.data["active"] = False
+        job.schedule_removal()
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
