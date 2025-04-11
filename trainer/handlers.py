@@ -35,6 +35,8 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
+    if not job.data.get("active", True):
+        return
     chat_id = job.data["chat_id"]
     message_id = job.data["message_id"]
     remaining = job.data["remaining"] - 1
@@ -49,14 +51,21 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"Осталось: {remaining} сек"
         )
         if remaining > 0:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML"
+            )
         else:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML"
+            )
             job.data["timer_ended"] = True
-            job.schedule_removal()
+            job.data["active"] = False
+    except BadRequest as e:
+        logger.info(f"Сообщение не найдено для редактирования: {e}")
+        job.data["active"] = False
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
-        job.schedule_removal()
+        job.data["active"] = False
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
@@ -79,7 +88,15 @@ async def show_next_move(context, chat_id, mode, sequence, step):
     if mode == "timed_fight":
         job = context.job_queue.run_repeating(
             update_timer, interval=1, first=0,
-            data={"chat_id": chat_id, "message_id": msg.message_id, "remaining": 5, "current_move": (control, attack), "step": step, "timer_ended": False}
+            data={
+                "chat_id": chat_id,
+                "message_id": msg.message_id,
+                "remaining": 5,
+                "current_move": (control, attack),
+                "step": step,
+                "timer_ended": False,
+                "active": True
+            }
         )
         context.user_data["current_timer"] = job
     return msg
@@ -169,7 +186,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_defense = random.choice(["Аге уке", "Сото уке", "Учи уке", "Гедан барай"])
 
         # Игрок атакует, бот защищается
-        player_control_success = bot_defense != DEFENSE_MOVES[bot_defense]["control"] != bot_control
+        player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
         player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
         bot_counter_success = not player_control_success
         bot_dobivanie_success = bot_counter_success and player_attack not in DEFENSE_MOVES[bot_defense]["counter"]
@@ -186,7 +203,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data["bot_score"] += 2
 
         # Бот атакует, игрок защищается
-        bot_control_success = player_defense != DEFENSE_MOVES[player_defense]["control"] != bot_control
+        bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
         bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
         player_counter_success = not bot_control_success
         player_dobivanie_success = player_counter_success and bot_attack not in DEFENSE_MOVES[player_defense]["counter"]
@@ -206,13 +223,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["step"] = step
         log = (
             f"Схватка {step}:\n"
-            f"Вы: Контроль {player_control} {'успех' if player_control_success else 'неуспех'}, "
-            f"Атака {player_attack} {'успех' if player_attack_success else 'неуспех'}\n"
-            f"Бот: Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'}, "
-            f"Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'}\n"
+            f"Тори <Вы>: Контроль {player_control} {'успех' if player_control_success else 'неуспех'} (+{1 if player_control_success else 0}), "
+            f"Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} (+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0})\n"
+            f"Уке <Бот>: Защита {bot_defense}, Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} (+{1 if bot_control_success else 0}), "
+            f"Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'} (+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0})\n"
+            f"Контратака: Вы {'успех' if player_counter_success else 'неуспех'} (+{1 if player_counter_success else 0}), "
+            f"Бот {'успех' if bot_counter_success else 'неуспех'} (+{1 if bot_counter_success else 0})\n"
+            f"Добивание: Вы {'успех' if player_dobivanie_success else 'неуспех'} (+{2 if player_dobivanie_success else 0}), "
+            f"Бот {'успех' if bot_dobivanie_success else 'неуспех'} (+{2 if bot_dobivanie_success else 0})\n"
             f"Счёт: Вы {context.user_data['player_score']} - Бот {context.user_data['bot_score']}"
         )
-        await query.edit_message_text(log)
+        await query.edit_message_text(log, parse_mode="HTML")
         if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
             winner = "Вы" if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
             await query.message.reply_text(f"Бой завершён! Победитель: {winner}", reply_markup=get_start_keyboard())
@@ -235,6 +256,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if sequence and step is not None and query.message.message_id == current_message_id:
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
+                job.data["active"] = False  # Останавливаем таймер
                 job.schedule_removal()
                 timer_ended = job.data.get("timer_ended", False)
                 del context.user_data["current_timer"]
