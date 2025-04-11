@@ -33,6 +33,57 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=menu_keyboard()
     )
 
+async def update_timer(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    chat_id = job.data["chat_id"]
+    message_id = job.data["message_id"]
+    remaining = job.data["remaining"] - 1
+    job.data["remaining"] = remaining
+    try:
+        control, attack = job.data["current_move"]
+        step = job.data["step"]
+        text = (
+            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>\n"
+            f"Осталось: {remaining} сек"
+        )
+        if remaining > 0:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML")
+        else:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML")
+            job.data["timer_ended"] = True
+            job.schedule_removal()
+    except Exception as e:
+        logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
+        job.schedule_removal()
+
+async def show_next_move(context, chat_id, mode, sequence, step):
+    control, attack = sequence[step]
+    if mode == "timed_fight":
+        text = (
+            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>\n"
+            f"Осталось: 5 сек"
+        )
+    else:  # simple_fight
+        text = (
+            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>"
+        )
+    reply_markup = answer_keyboard(send_hint=(mode == "simple_fight"))
+    msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML")
+    context.user_data["last_message_id"] = msg.message_id
+    if mode == "timed_fight":
+        job = context.job_queue.run_repeating(
+            update_timer, interval=1, first=0,
+            data={"chat_id": chat_id, "message_id": msg.message_id, "remaining": 5, "current_move": (control, attack), "step": step, "timer_ended": False}
+        )
+        context.user_data["current_timer"] = job
+    return msg
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -43,7 +94,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
     elif query.data in ["simple_fight", "timed_fight"]:
-        # Оставляем старую логику
         context.user_data["fight_sequence"] = generate_fight_sequence()
         context.user_data["current_step"] = 0
         context.user_data["correct_count"] = 0
@@ -73,7 +123,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
     elif query.data == "pvp_start":
-        context.user_data["pvp_mode"] = "sport"  # Спортивный поединок
+        context.user_data["pvp_mode"] = "sport"
         context.user_data["player_score"] = 0
         context.user_data["bot_score"] = 0
         context.user_data["step"] = 0
@@ -111,7 +161,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=pvp_move_keyboard()
         )
     elif query.data == "pvp_move":
-        # Базовая логика боя
         player_control = context.user_data["player_control"]
         player_attack = context.user_data["player_attack"]
         player_defense = context.user_data["player_defense"]
@@ -164,7 +213,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Счёт: Вы {context.user_data['player_score']} - Бот {context.user_data['bot_score']}"
         )
         await query.edit_message_text(log)
-        if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:  # 5 схваток для теста
+        if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
             winner = "Вы" if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
             await query.message.reply_text(f"Бой завершён! Победитель: {winner}", reply_markup=get_start_keyboard())
             context.user_data.clear()
@@ -178,3 +227,42 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Выберите контроль и атаку для следующей схватки:",
                 reply_markup=pvp_attack_keyboard()
             )
+    elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
+        sequence = context.user_data.get("fight_sequence")
+        step = context.user_data.get("current_step")
+        mode = context.user_data.get("mode")
+        current_message_id = context.user_data.get("last_message_id")
+        if sequence and step is not None and query.message.message_id == current_message_id:
+            if mode == "timed_fight" and "current_timer" in context.user_data:
+                job = context.user_data["current_timer"]
+                job.schedule_removal()
+                timer_ended = job.data.get("timer_ended", False)
+                del context.user_data["current_timer"]
+                if timer_ended:
+                    await query.edit_message_text("Время вышло! Вы проиграли.", parse_mode="HTML")
+                    return
+            await query.delete_message()
+            control, attack = sequence[step]
+            chosen_defense = query.data
+            is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
+            short_log = generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer)
+            short_msg = await query.message.reply_text(short_log, parse_mode="HTML")
+            detailed_log = generate_detailed_log(control, attack, chosen_defense, is_success)
+            await query.message.reply_text(detailed_log, parse_mode="HTML", reply_to_message_id=short_msg.message_id)
+            if is_success:
+                context.user_data["correct_count"] += 1
+            if control == DEFENSE_MOVES[chosen_defense]["control"]:
+                context.user_data["control_count"] += 1
+            if step >= len(sequence) - 1:
+                await query.message.reply_text("<b>Бой завершён!</b>", parse_mode="HTML")
+                final_stats = generate_final_stats(
+                    context.user_data["correct_count"],
+                    context.user_data["control_count"],
+                    context.user_data.get("hint_count", 0),
+                    len(MOVES)
+                )
+                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())
+                context.user_data.clear()
+            else:
+                context.user_data["current_step"] += 1
+                await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
