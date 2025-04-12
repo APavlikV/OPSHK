@@ -48,3 +48,31 @@ def generate_final_stats(correct_count, control_count, hint_count, total):
         f"🛡️ <code>Отбито контролей</code>: <b>{control_count}</b>\n"
         f"❌ <code>Пропущено атак</code>: <b>{total - correct_count}</b>"
     )
+
+def check_round(control, attack, defense):
+    from data import MOVES, DEFENSE_MOVES
+    result = {
+        "control_success": False,
+        "attack_success": False,
+        "defense_control_success": False,
+        "counter_success": False,
+        "defense_attack_success": False
+    }
+    if (control, attack) in MOVES:
+        result["control_success"] = True
+        result["attack_success"] = True
+    defense_data = DEFENSE_MOVES.get(defense, {})
+    if defense_data.get("control") == control:
+        result["defense_control_success"] = True
+    if attack in defense_data.get("counter", []):
+        result["counter_success"] = True
+    if attack in defense_data.get("attack_defense", []):
+        result["defense_attack_success"] = True
+    return result
+
+def get_hint(control, attack):
+    correct_defense = next(
+        (move for move, data in DEFENSE_MOVES.items() if control == data["control"] and attack in data["attack_defense"]),
+        "Аге уке"  # Запасной вариант
+    )
+    return f"Попробуйте защиту: {correct_defense}"
