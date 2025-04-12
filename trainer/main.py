@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -6,6 +7,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+from telegram.error import Conflict
 from handlers import (
     start,
     setnick,
@@ -37,13 +39,22 @@ def main():
         application.add_handler(CallbackQueryHandler(button))
 
         logger.info("Настройка polling")
-        application.run_polling(allowed_updates=["message", "callback_query"], drop_pending_updates=True)
+        while True:
+            try:
+                application.run_polling(
+                    allowed_updates=["message", "callback_query"],
+                    drop_pending_updates=True,
+                    close_loop=False
+                )
+                break
+            except Conflict as e:
+                logger.warning(f"Конфликт getUpdates: {e}. Повторная попытка через 5 секунд...")
+                asyncio.run(asyncio.sleep(5))
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске: {e}", exc_info=True)
         raise
     finally:
         logger.info("Инициируется завершение работы")
-        import asyncio
         asyncio.run(shutdown(application))
 
 if __name__ == "__main__":
