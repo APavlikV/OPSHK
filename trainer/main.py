@@ -5,7 +5,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 from telegram.request import HTTPXRequest
-from handlers import start, game, button
+from handlers import start, game, button, setnick, handle_nick_reply  # Добавили новые импорты
 
 # --- Глобальный логгер ---
 logging.basicConfig(
@@ -14,7 +14,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 # --- Получение и проверка переменных окружения ---
 def get_env_variable(name: str, required: bool = True, default=None):
     value = os.getenv(name, default)
@@ -22,7 +21,6 @@ def get_env_variable(name: str, required: bool = True, default=None):
         logger.error(f"Переменная окружения '{name}' не задана!")
         raise EnvironmentError(f"{name} not set")
     return value
-
 
 # --- Основная асинхронная точка запуска ---
 async def main():
@@ -41,6 +39,8 @@ async def main():
 
     # Регистрируем обработчики
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("setnick", setnick))  # Новый обработчик для /setnick
+    app.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))  # Новый обработчик для force_reply
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
 
@@ -68,7 +68,6 @@ async def main():
         await app.updater.stop()
         await app.stop()
         await app.shutdown()
-
 
 # --- Запуск ---
 if __name__ == "__main__":
