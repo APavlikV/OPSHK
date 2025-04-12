@@ -1,4 +1,4 @@
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import ContextTypes
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
@@ -25,14 +25,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Выбрать свой", callback_data="choose_own_nick")]
         ]
         await update.message.reply_text(
-            f"🥋 Добро пожаловать в КАРАТЭ тренажер!\n"
-            f"Использовать ваш ник Telegram ({telegram_username}) или выбрать свой?",
+            f"<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n"
+            f"Использовать ваш <b>ник Telegram ({telegram_username})</b> или <b>выбрать свой?</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(
-            "🥋 Добро пожаловать в КАРАТЭ тренажер!\n"
+            "<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n"
             "Введите ваш ник:",
             parse_mode="HTML",
             reply_markup=ForceReply(selective=True)
@@ -57,7 +57,7 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif nick:
         context.user_data["nickname"] = nick
         await update.message.reply_text(
-            f"Ник установлен: {nick}\n"
+            f"Ник установлен: <b>{nick}</b>\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
             parse_mode="HTML",
             reply_markup=get_start_keyboard()
@@ -65,7 +65,7 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         context.user_data["nickname"] = "Вы"
         await update.message.reply_text(
-            "Ник не указан, используем 'Вы'.\n"
+            "Ник не указан, используем <b>Вы</b>.\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
             parse_mode="HTML",
             reply_markup=get_start_keyboard()
@@ -92,9 +92,9 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         control, attack = job.data["current_move"]
         step = job.data["step"]
         text = (
-            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
-            f"🎯 Контроль: <b>{control}</b>\n"
-            f"💥 Атака: <b>{attack}</b>\n"
+            f"<u>⚔️ Схватка {step + 1} из {len(MOVES)}</u>\n\n"
+            f"🎯 <i>Контроль:</i> <b>{control}</b>\n"
+            f"💥 <i>Атака:</i> <b>{attack}</b>\n"
             f"Осталось: {remaining} сек"
         )
         if remaining > 0:
@@ -134,16 +134,16 @@ async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
     if mode == "timed_fight":
         text = (
-            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
-            f"🎯 Контроль: <b>{control}</b>\n"
-            f"💥 Атака: <b>{attack}</b>\n"
+            f"<u>⚔️ Схватка {step + 1} из {len(MOVES)}</u>\n\n"
+            f"🎯 <i>Контроль:</i> <b>{control}</b>\n"
+            f"💥 <i>Атака:</i> <b>{attack}</b>\n"
             f"Осталось: 5 сек"
         )
     else:  # simple_fight
         text = (
-            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
-            f"🎯 Контроль: <b>{control}</b>\n"
-            f"💥 Атака: <b>{attack}</b>"
+            f"<u>⚔️ Схватка {step + 1} из {len(MOVES)}</u>\n\n"
+            f"🎯 <i>Контроль:</i> <b>{control}</b>\n"
+            f"💥 <i>Атака:</i> <b>{attack}</b>"
         )
     reply_markup = answer_keyboard(send_hint=(mode == "simple_fight"))
     msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML")
@@ -174,17 +174,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "use_telegram_nick":
         telegram_username = update.effective_user.username or update.effective_user.first_name
         context.user_data["nickname"] = telegram_username
-        await query.edit_message_text(
-            f"Ник установлен: {telegram_username}\n"
+        await query.message.reply_text(  # Используем reply_text вместо edit
+            f"Ник установлен: <b>{telegram_username}</b>\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
             parse_mode="HTML",
             reply_markup=get_start_keyboard()
         )
+        try:
+            await query.message.delete()  # Удаляем сообщение с кнопками
+        except BadRequest as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
     elif query.data == "choose_own_nick":
-        await query.edit_message_text(
+        await query.message.reply_text(
             "Введите ваш ник:",
             reply_markup=ForceReply(selective=True)
         )
+        try:
+            await query.message.delete()  # Удаляем сообщение с кнопками
+        except BadRequest as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
     elif query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
     elif query.data in ["simple_fight", "timed_fight"]:
@@ -206,10 +214,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             control, attack = sequence[step]
             is_success, partial_success, correct_answer = check_move(control, attack, "Аге уке")
             text = (
-                f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
-                f"🎯 Контроль: <b>{control}</b>\n"
-                f"💥 Атака: <b>{attack}</b>\n\n"
-                f"💡 Правильно: 🛡 <b>{correct_answer}</b>"
+                f"<u>⚔️ Схватка {step + 1} из {len(MOVES)}</u>\n\n"
+                f"🎯 <i>Контроль:</i> <b>{control}</b>\n"
+                f"💥 <i>Атака:</i> <b>{attack}</b>\n\n"
+                f"💡 <i>Правильно:</i> 🛡 <b>{correct_answer}</b>"
             )
             await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
@@ -262,7 +270,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
         context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
         await query.edit_message_text(
-            f"⚔️ Схватка 1\n\n🎯 Начните боевое действие!\n<b>1. Выберите уровень контроля</b>",
+            f"<u>⚔️ Схватка 1</u>\n\n🎯 <i>Начните боевое действие!</i>\n<b>1. Выберите уровень контроля</b>",
             reply_markup=pvp_attack_keyboard("control"),
             parse_mode="HTML"
         )
@@ -270,7 +278,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["player_control"] = query.data.split("_")[2]
         step = context.user_data["step"] + 1
         await query.edit_message_text(
-            f"⚔️ Схватка {step}\n\n💥 Завершите боевое действие!\n<b>2. Выберите уровень атаки</b>",
+            f"<u>⚔️ Схватка {step}</u>\n\n💥 <i>Завершите боевое действие!</i>\n<b>2. Выберите уровень атаки</b>",
             reply_markup=pvp_attack_keyboard("attack"),
             parse_mode="HTML"
         )
@@ -278,7 +286,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["player_attack"] = query.data.split("_")[2]
         step = context.user_data["step"] + 1
         await query.edit_message_text(
-            f"⚔️ Схватка {step}\n\n"
+            f"<u>⚔️ Схватка {step}</u>\n\n"
             f"Ваша атака: <i>Контроль</i> <b>{context.user_data['player_control']}</b>, <i>Атака</i> <b>{context.user_data['player_attack']}</b>\n"
             f"<b>🛡️ Выберите защиту:</b>",
             reply_markup=answer_keyboard(),
@@ -288,11 +296,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["player_defense"] = query.data
         await query.edit_message_text(
             f"Ваш ход\n"
-            f"👊🏻Атака:\n"
+            f"👊🏻<i>Атака:</i>\n"
             f"<i>Контроль</i> <b>{context.user_data['player_control']}</b>,\n"
             f"<i>Атака</i> <b>{context.user_data['player_attack']}</b>\n"
-            f"🛡 Защита: <b>{context.user_data['player_defense']}</b>\n"
-            f"Подтвердите:",
+            f"<i>Защита:</i> <b>{context.user_data['player_defense']}</b>\n"
+            f"<i>Подтвердите:</i>",
             reply_markup=pvp_move_keyboard(),
             parse_mode="HTML"
         )
@@ -344,25 +352,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         step = context.user_data["step"] + 1
         context.user_data["step"] = step
         log = (
-            f"<code>⚔️ Схватка {step}</code>\n\n"
-            f"<code>Тори</code> <b>{player_name}</b>:\n"
-            f"🎯 Контроль {player_control} {'успех' if player_control_success else 'неуспех'} {'✅' if player_control_success else '❌'} (<b>+{1 if player_control_success else 0}</b>)\n"
-            f"💥 Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} {'✅' if player_attack_success else '❌'} (<b>+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0}</b>)\n\n"
-            f"<code>Уке</code> <b>Бот</b>:\n"
-            f"🛡️ Защита {bot_defense}\n"
-            f"🛑 Защита контроля: {'успех' if bot_control_defense_success else 'неуспех'} {'✅' if bot_control_defense_success else '❌'} (<b>+{1 if bot_control_defense_success else 0}</b>)\n"
-            f"➡️ Контратака: {'успех' if bot_counter_success else 'неуспех'} {'✅' if bot_counter_success else '❌'} (<b>+{1 if bot_counter_success else 0}</b>)\n"
-            f"🔥 {'Добивание' if bot_dobivanie else 'Защита от атаки'}: {'успех' if bot_dobivanie or bot_attack_defense else 'неуспех'} {'✅' if bot_dobivanie or bot_attack_defense else '❌'} (<b>+{2 if bot_dobivanie else 0}</b>)\n\n"
+            f"<u>⚔️ Схватка {step}</u>\n\n"
+            f"<u>Тори</u> <b>{player_name}</b>:\n"
+            f"🎯 <i>Контроль</i> <b>{player_control}</b> {'✅' if player_control_success else '❌'} <b>(+{1 if player_control_success else 0})</b>\n"
+            f"💥 <i>Атака</i> <b>{player_attack}</b> {'✅' if player_attack_success else '❌'} <b>(+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0})</b>\n\n"
+            f"<u>Уке</u> <b>Бот</b>:\n"
+            f"🛡️ <i>Защита</i> <b>{bot_defense}</b>\n"
+            f"🛑 <i>Защита контроля:</i> {'✅' if bot_control_defense_success else '❌'} <b>(+{1 if bot_control_defense_success else 0})</b>\n"
+            f"➡️ <i>Контратака:</i> {'✅' if bot_counter_success else '❌'} <b>(+{1 if bot_counter_success else 0})</b>\n"
+            f"🔥 <i>{'Добивание' if bot_dobivanie else 'Защита от атаки'}:</i> {'✅' if bot_dobivanie or bot_attack_defense else '❌'} <b>(+{2 if bot_dobivanie else 0})</b>\n\n"
             f"--------\n\n"
-            f"<code>Тори</code> <b>Бот</b>:\n"
-            f"🎯 Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} {'✅' if bot_control_success else '❌'} (<b>+{1 if bot_control_success else 0}</b>)\n"
-            f"💥 Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'} {'✅' if bot_attack_success else '❌'} (<b>+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0}</b>)\n\n"
-            f"<code>Уке</code> <b>{player_name}</b>:\n"
-            f"🛡️ Защита {player_defense}\n"
-            f"🛑 Защита контроля: {'успех' if player_control_defense_success else 'неуспех'} {'✅' if player_control_defense_success else '❌'} (<b>+{1 if player_control_defense_success else 0}</b>)\n"
-            f"➡️ Контратака: {'успех' if player_counter_success else 'неуспех'} {'✅' if player_counter_success else '❌'} (<b>+{1 if player_counter_success else 0}</b>)\n"
-            f"🔥 {'Добивание' if player_dobivanie else 'Защита от атаки'}: {'успех' if player_dobivanie or player_attack_defense else 'неуспех'} {'✅' if player_dobivanie or player_attack_defense else '❌'} (<b>+{2 if player_dobivanie else 0}</b>)\n\n"
-            f"🥊 Счёт: <b>{player_name}</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
+            f"<u>Тори</u> <b>Бот</b>:\n"
+            f"🎯 <i>Контроль</i> <b>{bot_control}</b> {'✅' if bot_control_success else '❌'} <b>(+{1 if bot_control_success else 0})</b>\n"
+            f"💥 <i>Атака</i> <b>{bot_attack}</b> {'✅' if bot_attack_success else '❌'} <b>(+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0})</b>\n\n"
+            f"<u>Уке</u> <b>{player_name}</b>:\n"
+            f"🛡️ <i>Защита</i> <b>{player_defense}</b>\n"
+            f"🛑 <i>Защита контроля:</i> {'✅' if player_control_defense_success else '❌'} <b>(+{1 if player_control_defense_success else 0})</b>\n"
+            f"➡️ <i>Контратака:</i> {'✅' if player_counter_success else '❌'} <b>(+{1 if player_counter_success else 0})</b>\n"
+            f"🔥 <i>{'Добивание' if player_dobivanie else 'Защита от атаки'}:</i> {'✅' if player_dobivanie or player_attack_defense else '❌'} <b>(+{2 if player_dobivanie else 0})</b>\n\n"
+            f"🥊 <i>Счёт:</i> <b>{player_name}</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
         )
         # Сначала отправляем лог схватки
         await query.message.reply_text(log, parse_mode="HTML")
@@ -390,7 +398,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
             # Отправляем новое сообщение для следующего хода
             await query.message.reply_text(
-                f"⚔️ Схватка {step + 1}\n\n🎯 Начните боевое действие!\n<b>1. Выберите уровень контроля</b>",
+                f"<u>⚔️ Схватка {step + 1}</u>\n\n🎯 <i>Начните боевое действие!</i>\n<b>1. Выберите уровень контроля</b>",
                 reply_markup=pvp_attack_keyboard("control"),
                 parse_mode="HTML"
             )
@@ -437,9 +445,3 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 context.user_data["current_step"] += 1
                 await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
-
-def setup_application(application):
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("setnick", setnick))
-    application.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))
-    # Другие обработчики добавляются здесь
