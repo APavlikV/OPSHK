@@ -50,7 +50,7 @@ def pvp_bot_keyboard():
 
 def pvp_attack_keyboard(mode):
     keyboard = [
-        [InlineKeyboardButton("ДЗ", callback_data=f"attack_{mode}_ДЗ")],
+        [InlineKeyboardButton("ДЗ", callback_data=f"attack_hit_ДЗ")],
         [InlineKeyboardButton("СС", callback_data=f"attack_{mode}_СС"), InlineKeyboardButton("ТР", callback_data=f"attack_{mode}_ТР")]
     ]
     return InlineKeyboardMarkup(keyboard)
