@@ -6,6 +6,7 @@ from telegram.ext import (
 )
 from telegram.request import HTTPXRequest
 from handlers import start, game, button, setnick, handle_nick_reply
+from database import init_db
 
 # --- Глобальный логгер ---
 logging.basicConfig(
@@ -31,6 +32,10 @@ async def main():
     hostname = get_env_variable("RENDER_EXTERNAL_HOSTNAME")
     port = int(os.getenv("PORT", "10000"))
 
+    # Инициализация базы данных
+    init_db()
+    logger.info("🗄️ База данных SQLite инициализирована")
+
     # Настройка HTTP-запросов
     request = HTTPXRequest(read_timeout=60, connect_timeout=60)
 
@@ -40,7 +45,7 @@ async def main():
     # Регистрируем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setnick", setnick))
-    app.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))
+    app.add_handler(MessageHandler(filters.REPLY & ~filters.COMMAND, handle_nick_reply))
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
 
