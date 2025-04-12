@@ -36,7 +36,6 @@ from texts import TEXTS
 
 logger = logging.getLogger(__name__)
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
     if not context.user_data.get("state"):
@@ -97,12 +96,13 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Нажата кнопка 'Игра'")
+    logger.info("Нажата кнопка или команда 'Игра'")
     if not context.user_data.get("state"):
         context.user_data["state"] = GameState()
     await update.message.reply_text(
         TEXTS["game_menu"],
-        reply_markup=menu_keyboard()
+        reply_markup=menu_keyboard(),
+        parse_mode=ParseMode.HTML
     )
 
 
@@ -118,13 +118,13 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     message_id = job.data["message_id"]
     remaining = job.data["remaining"] - 1
     job.data["remaining"] = remaining
-    state = context.user_data.get("state", GameState())
+    state = job.data.get("state", GameState())  # Храним состояние в job.data
 
     if not job.data.get("active", True):
         return
 
     if remaining <= 0:
-        stop_timer(context)
+        stop_timer(context, job)
         try:
             await context.bot.edit_message_text(
                 chat_id=chat_id,
@@ -166,9 +166,11 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=get_start_keyboard()
                 )
                 state.reset()
+                job.data["state"] = state
             else:
                 state.current_step += 1
-                await show_next_move(context, chat_id, state.mode, state.fight_sequence, state.current_step)
+                job.data["state"] = state
+                await show_next_move(context, chat_id, state.mode, state.fight_sequence, state.current_step, job)
         except BadRequest as e:
             logger.warning(f"Не удалось обновить сообщение таймера: {e}")
         return
@@ -192,9 +194,9 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Не удалось обновить сообщение таймера: {e}")
 
 
-async def show_next_move(context, chat_id, mode, fight_sequence, current_step):
-    stop_timer(context)
-    state = context.user_data.get("state", GameState())
+async def show_next_move(context, chat_id, mode, fight_sequence, current_step, job=None):
+    state = job.data.get("state", GameState()) if job else context.user_data.get("state", GameState())
+    stop_timer(context, job)
     control, attack = fight_sequence[current_step]
     if mode == "timed_fight":
         message = await context.bot.send_message(
@@ -210,19 +212,25 @@ async def show_next_move(context, chat_id, mode, fight_sequence, current_step):
             parse_mode=ParseMode.HTML
         )
         state.last_message_id = message.message_id
+        job_data = {
+            "chat_id": chat_id,
+            "message_id": message.message_id,
+            "remaining": 5,
+            "active": True,
+            "state": state
+        }
         context.job_queue.run_repeating(
             update_timer,
             interval=1,
             first=0,
-            data={
-                "chat_id": chat_id,
-                "message_id": message.message_id,
-                "remaining": 5,
-                "active": True,
-            },
+            data=job_data,
             name=f"timer_{chat_id}"
         )
         state.current_timer = context.job_queue.get_jobs_by_name(f"timer_{chat_id}")[-1]
+        if job:
+            job.data["state"] = state
+        else:
+            context.user_data["state"] = state
     else:
         message = await context.bot.send_message(
             chat_id=chat_id,
@@ -236,18 +244,23 @@ async def show_next_move(context, chat_id, mode, fight_sequence, current_step):
             parse_mode=ParseMode.HTML
         )
         state.last_message_id = message.message_id
+        context.user_data["state"] = state
 
 
-def stop_timer(context):
+def stop_timer(context, job=None):
     """Останавливает активный таймер."""
-    state = context.user_data.get("state", GameState())
-    if state.current_timer and state.current_timer.data.get("active", False):
+    state = job.data.get("state", None) if job else context.user_data.get("state", GameState())
+    if state and state.current_timer and state.current_timer.data.get("active", False):
         state.current_timer.data["active"] = False
         try:
             state.current_timer.schedule_removal()
         except Exception as e:
             logger.warning(f"Не удалось удалить таймер: {e}")
         state.current_timer = None
+        if job:
+            job.data["state"] = state
+        else:
+            context.user_data["state"] = state
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -273,6 +286,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             TEXTS["choose_own_nick"],
             reply_markup=ForceReply(selective=True)
+        )
+        try:
+            await query.message.delete()
+        except BadRequest as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
+    elif query.data == "game":
+        await query.message.reply_text(
+            TEXTS["game_menu"],
+            reply_markup=menu_keyboard(),
+            parse_mode=ParseMode.HTML
         )
         try:
             await query.message.delete()
@@ -465,7 +488,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(detailed_log, parse_mode=ParseMode.HTML, reply_to_message_id=short_msg.message_id)
             if is_success:
                 state.correct_count += 1
-            if control == DEFENSE_MOVES[chosen_defense]["control"]:
+            if control == DEFENSE_MOVES.get(chosen_defense, {}).get("control", ""):
                 state.control_count += 1
             if state.current_step >= len(state.fight_sequence) - 1:
                 await query.message.reply_text(TEXTS["training_end"], parse_mode=ParseMode.HTML)
