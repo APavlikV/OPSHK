@@ -1,5 +1,40 @@
+import random
+import logging
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, ParseMode
+from telegram.error import BadRequest
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+from keyboards import (
+    menu_keyboard,
+    training_fight_keyboard,
+    training_rules_keyboard,
+    training_memo_keyboard,
+    answer_keyboard,
+    pvp_bot_keyboard,
+    pvp_attack_keyboard,
+    pvp_move_keyboard,
+)
+from game_logic import (
+    generate_fight_sequence,
+    check_move,
+    generate_short_log,
+    generate_detailed_log,
+    generate_final_stats,
+    calculate_pvp_scores,
+    generate_pvp_log,
+)
+from data import MOVES, DEFENSE_MOVES
 from state import GameState
 from texts import TEXTS
+
+logger = logging.getLogger(__name__)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
@@ -24,6 +59,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML",
             reply_markup=ForceReply(selective=True)
         )
+
+
+async def setnick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        TEXTS["setnick_prompt"],
+        reply_markup=ForceReply(selective=True)
+    )
+
 
 async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
@@ -51,6 +94,7 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_start_keyboard()
         )
 
+
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
     if not context.user_data.get("state"):
@@ -59,6 +103,151 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         TEXTS["game_menu"],
         reply_markup=menu_keyboard()
     )
+
+
+def get_start_keyboard():
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🥊 Начать тренировку!", callback_data="game")]]
+    )
+
+
+async def update_timer(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    chat_id = job.data["chat_id"]
+    message_id = job.data["message_id"]
+    remaining = job.data["remaining"] - 1
+    job.data["remaining"] = remaining
+    state = context.user_data.get("state", GameState())
+
+    if not job.data.get("active", True):
+        return
+
+    if remaining <= 0:
+        stop_timer(context)
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text="⏰ Время вышло!",
+                parse_mode="HTML",
+            )
+            control, attack = state.fight_sequence[state.current_step]
+            is_success, partial_success, correct_answer = check_move(control, attack, "Аге уке")
+            short_log = generate_short_log(
+                state.current_step, control, attack, "Нет ответа", False, False, correct_answer
+            )
+            short_msg = await context.bot.send_message(
+                chat_id=chat_id, text=short_log, parse_mode="HTML"
+            )
+            detailed_log = generate_detailed_log(control, attack, "Нет ответа", False)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=detailed_log,
+                parse_mode="HTML",
+                reply_to_message_id=short_msg.message_id
+            )
+            if state.current_step >= len(state.fight_sequence) - 1:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=TEXTS["training_end"],
+                    parse_mode="HTML"
+                )
+                final_stats = generate_final_stats(
+                    state.correct_count,
+                    state.control_count,
+                    state.hint_count,
+                    len(MOVES)
+                )
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=final_stats,
+                    parse_mode="HTML",
+                    reply_markup=get_start_keyboard()
+                )
+                state.reset()
+            else:
+                state.current_step += 1
+                await show_next_move(context, chat_id, state.mode, state.fight_sequence, state.current_step)
+        except BadRequest as e:
+            logger.warning(f"Не удалось обновить сообщение таймера: {e}")
+        return
+
+    try:
+        control, attack = state.fight_sequence[state.current_step]
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=TEXTS["training_move_timed"].format(
+                step=state.current_step + 1,
+                total=len(MOVES),
+                control=control,
+                attack=attack,
+                remaining=remaining
+            ),
+            reply_markup=answer_keyboard(),
+            parse_mode="HTML"
+        )
+    except BadRequest as e:
+        logger.warning(f"Не удалось обновить сообщение таймера: {e}")
+
+
+async def show_next_move(context, chat_id, mode, fight_sequence, current_step):
+    stop_timer(context)
+    state = context.user_data.get("state", GameState())
+    control, attack = fight_sequence[current_step]
+    if mode == "timed_fight":
+        message = await context.bot.send_message(
+            chat_id=chat_id,
+            text=TEXTS["training_move_timed"].format(
+                step=current_step + 1,
+                total=len(MOVES),
+                control=control,
+                attack=attack,
+                remaining=5
+            ),
+            reply_markup=answer_keyboard(),
+            parse_mode="HTML"
+        )
+        state.last_message_id = message.message_id
+        context.job_queue.run_repeating(
+            update_timer,
+            interval=1,
+            first=0,
+            data={
+                "chat_id": chat_id,
+                "message_id": message.message_id,
+                "remaining": 5,
+                "active": True,
+            },
+            name=f"timer_{chat_id}"
+        )
+        state.current_timer = context.job_queue.get_jobs_by_name(f"timer_{chat_id}")[-1]
+    else:
+        message = await context.bot.send_message(
+            chat_id=chat_id,
+            text=TEXTS["training_move_simple"].format(
+                step=current_step + 1,
+                total=len(MOVES),
+                control=control,
+                attack=attack
+            ),
+            reply_markup=answer_keyboard(send_hint=True),
+            parse_mode="HTML"
+        )
+        state.last_message_id = message.message_id
+
+
+def stop_timer(context):
+    """Останавливает активный таймер."""
+    state = context.user_data.get("state", GameState())
+    if state.current_timer and state.current_timer.data.get("active", False):
+        state.current_timer.data["active"] = False
+        try:
+            state.current_timer.schedule_removal()
+        except Exception as e:
+            logger.warning(f"Не удалось удалить таймер: {e}")
+        state.current_timer = None
+
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -290,14 +479,3 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 state.current_step += 1
                 await show_next_move(context, query.message.chat_id, state.mode, state.fight_sequence, state.current_step)
-
-def stop_timer(context):
-    """Останавливает активный таймер."""
-    state = context.user_data.get("state", GameState())
-    if state.current_timer and state.current_timer.data.get("active", False):
-        state.current_timer.data["active"] = False
-        try:
-            state.current_timer.schedule_removal()
-        except Exception as e:
-            logger.warning(f"Не удалось удалить таймер: {e}")
-        state.current_timer = None
