@@ -17,9 +17,11 @@ def training_mode_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 def pvp_bot_keyboard():
     keyboard = [
-        [InlineKeyboardButton("Правила боя", callback_data="pvp_rules")],
+        [InlineKeyboardButton("Правила", callback_data="pvp_rules")],
         [InlineKeyboardButton("Начать бой", callback_data="pvp_start")]
     ]
     return InlineKeyboardMarkup(keyboard)
