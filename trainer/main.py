@@ -5,7 +5,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 from telegram.request import HTTPXRequest
-from handlers import start, game, button, setnick, handle_nick_reply
+from handlers import start, game, button, setnick, handle_nick_reply  # Добавили новые импорты
 
 # --- Глобальный логгер ---
 logging.basicConfig(
@@ -39,8 +39,8 @@ async def main():
 
     # Регистрируем обработчики
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setnick", setnick))
-    app.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))
+    app.add_handler(CommandHandler("setnick", setnick))  # Новый обработчик для /setnick
+    app.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))  # Новый обработчик для force_reply
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
 
