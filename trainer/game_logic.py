@@ -1,5 +1,5 @@
 import random
-from data import MOVES, DEFENSE_MOVES
+from data import MOVES, DEFENSE_MOVES, ATTACK_PHRASES, DEFENSE_PHRASES
 
 def generate_fight_sequence():
     return random.sample(MOVES, len(MOVES))
@@ -37,17 +37,31 @@ def generate_detailed_log(control, attack, chosen_defense, is_success):
     control_blocked = control == defense["control"]
     attack_blocked = attack in defense["attack_defense"]
     
-    control_result = "✅ Отражён" if control_blocked else "❌ Пропущен"
-    attack_result = "✅ Заблокирован" if attack_blocked else "❌ Пропущен"
+    # Выбираем случайные фразы из ATTACK_PHRASES и DEFENSE_PHRASES
+    control_phrase = random.choice(
+        ATTACK_PHRASES["control_success"][control] if control_blocked else ATTACK_PHRASES["control_fail"][control]
+    )
+    attack_phrase = random.choice(
+        ATTACK_PHRASES["attack_success"][attack] if attack_blocked else ATTACK_PHRASES["attack_fail"][attack]
+    )
+    defense_phrase = random.choice(
+        DEFENSE_PHRASES["defense_success"][control] if control_blocked else DEFENSE_PHRASES["defense_fail"][control]
+    )
+    counter_phrase = random.choice(
+        DEFENSE_PHRASES["counter_success"][chosen_defense] if is_success else DEFENSE_PHRASES["counter_fail"][chosen_defense]
+    )
     
     text = (
         f"<b>Детали:</b>\n"
-        f"🎯 <i>Контроль ({control}):</i> <b>{control_result}</b>\n"
-        f"💥 <i>Атака ({attack}):</i> <b>{attack_result}</b>"
+        f"🥸 <b>Bot Вася</b> {control_phrase} {attack_phrase}\n"
+        f"{defense_phrase}\n"
     )
     
     if is_success:
-        text += f"\n\n🔥 <b>Добивание успешно!</b>"
+        text += f"{counter_phrase}"
+    else:
+        text += f"{counter_phrase}"
+    
     return text
 
 def generate_final_stats(correct_count, control_count, hint_count, total_moves):
