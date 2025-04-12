@@ -1,44 +1,62 @@
 import random
-from data import MOVES, DEFENSE_MOVES, ATTACK_PHRASES, DEFENSE_PHRASES
+from data import MOVES, DEFENSE_MOVES
 
 def generate_fight_sequence():
-    sequence = MOVES.copy()
-    random.shuffle(sequence)
-    return sequence
+    return random.sample(MOVES, len(MOVES))
 
 def check_move(control, attack, chosen_defense):
-    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-    control_success = control == defense_data.get("control")
-    attack_success = attack in defense_data.get("attack_defense", [])
-    is_success = control_success and attack_success
-    partial_success = not control_success and attack_success
-    correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["control"] and attack in data["attack_defense"]), None)
+    control_blocked = control == DEFENSE_MOVES[chosen_defense]["control"]
+    attack_blocked = attack in DEFENSE_MOVES[chosen_defense]["attack_defense"]
+    
+    is_success = control_blocked and attack_blocked
+    partial_success = control_blocked != attack_blocked
+    
+    correct_answer = None
+    for defense, params in DEFENSE_MOVES.items():
+        if control == params["control"] and attack in params["attack_defense"]:
+            correct_answer = defense
+            break
+    
     return is_success, partial_success, correct_answer
 
 def generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer):
-    result_emoji = "🟢" if is_success else "🟠" if partial_success else "🔴"
-    return f"<u>Атака {step + 1}</u>\n" \
-           f"Контроль: {control}\n" \
-           f"Атака: {attack}\n" \
-           f"Защита и контратака: {chosen_defense}\n" \
-           f"{result_emoji} <b>{'УСПЕХ' if is_success else 'ПОРАЖЕНИЕ'}</b>" + (f" (правильно: {correct_answer})" if not is_success and correct_answer else "")
+    result = "<b>УСПЕХ</b> ✅" if is_success else "<b>ЧАСТИЧНЫЙ УСПЕХ</b> ⚠️" if partial_success else "<b>ПОРАЖЕНИЕ</b> ❌"
+    text = (
+        f"<u>⚔️ Схватка {step + 1}</u>\n\n"
+        f"🎯 <i>Контроль:</i> <b>{control}</b>\n"
+        f"💥 <i>Атака:</i> <b>{attack}</b>\n"
+        f"🛡 <i>Защита:</i> <b>{chosen_defense}</b>\n\n"
+        f"{result}"
+    )
+    if correct_answer and not is_success:
+        text += f"\n💡 <i>Правильно:</i> <b>{correct_answer}</b>"
+    return text
 
 def generate_detailed_log(control, attack, chosen_defense, is_success):
-    attacker_control_success = random.choice([True, False])
-    attacker_attack_success = random.choice([True, False])
-    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-    counter_zone = random.choice(defense_data.get("counter", ["ДЗ"])) if is_success else random.choice(["ГДН", "СС", "ТР", "ДЗ"])
+    control_blocked = control == DEFENSE_MOVES[chosen_defense]["control"]
+    attack_blocked = attack in DEFENSE_MOVES[chosen_defense]["attack_defense"]
     
-    attacker_name = "<b>Bot Вася</b>"
-    attack_text = f"{attacker_name} {'яростно атаковал' if attacker_attack_success else 'недолго думая ринулся в атаку'}: " \
-                  f"<i>{random.choice(ATTACK_PHRASES['control_success' if attacker_control_success else 'control_fail'][control])}</i> " \
-                  f"<i>{random.choice(ATTACK_PHRASES['attack_success' if attacker_attack_success else 'attack_fail'][attack])}</i> ⚔️ "
-    defense_text = f"{random.choice(DEFENSE_PHRASES['defense_success' if control == defense_data.get('control') else 'defense_fail'][control if control == defense_data.get('control') else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))])} " \
-                   f"{random.choice(DEFENSE_PHRASES['counter_success' if is_success else 'counter_fail'][chosen_defense])}"
-    return f"{attack_text}{defense_text}"
+    control_result = "✅ <b>Контроль отбит!</b>" if control_blocked else "❌ <b>Контроль не отбит!</b>"
+    attack_result = "✅ <b>Атака заблокирована!</b>" if attack_blocked else "❌ <b>Атака пропущена!</b>"
+    
+    text = (
+        f"<u>📝 Результат:</u>\n"
+        f"{control_result}\n"
+        f"{attack_result}"
+    )
+    if is_success:
+        text += "\n\n🎉 <b>Превосходно!</b> Полная защита и контратака!"
+    return text
 
-def generate_final_stats(correct_count, control_count, hint_count, total):
-    return f"<b>Статистика боя:</b>\n" \
-           f"Правильных: {correct_count}, с подсказкой: {hint_count}, из {total}\n" \
-           f"Отбито {control_count} из {total} контролей\n" \
-           f"Пропущено {total - correct_count} атак"
+def generate_final_stats(correct_count, control_count, hint_count, total_moves):
+    correct_percent = (correct_count / total_moves) * 100
+    control_percent = (control_count / total_moves) * 100
+    
+    text = (
+        f"<b>🏆 Итоги боя:</b>\n"
+        f"➖\n"
+        f"🥋 <b>Полных побед:</b> {correct_count} из {total_moves} ({correct_percent:.0f}%)\n"
+        f"🎯 <b>Контролей отбито:</b> {control_count} из {total_moves} ({control_percent:.0f}%)\n"
+        f"💡 <b>Подсказок использовано:</b> {hint_count}"
+    )
+    return text
