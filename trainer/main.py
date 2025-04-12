@@ -1,61 +1,43 @@
+import os
 import logging
 import asyncio
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-)
-from telegram.error import Conflict
-from handlers import (
-    start,
-    setnick,
-    handle_nick_reply,
-    game,
-    button,
-)
+from telegram.ext import Application, CommandHandler
+from telegram.request import HTTPXRequest
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-async def shutdown(application):
-    logger.info("Завершение работы приложения")
-    await application.stop()
-    await application.updater.stop()
+async def start(update, context):
+    await update.message.reply_text("Добро пожаловать на Арену! Здесь будут PvP-сражения.")
 
-def main():
+async def main():
+    logger.info("🚀 Запуск бота Арены...")
+    token = os.getenv("ARENA_TELEGRAM_TOKEN")  # Отдельный токен для Арены
+    if not token:
+        raise ValueError("ARENA_TELEGRAM_TOKEN не задан!")
+    hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    port = int(os.getenv("PORT", "10000"))
+
+    request = HTTPXRequest(read_timeout=60, connect_timeout=60)
+    app = Application.builder().token(token).request(request).build()
+
+    app.add_handler(CommandHandler("start", start))
+
+    webhook_url = f"https://{hostname}/{token}"
+    logger.info(f"🌐 Установка webhook: {webhook_url}")
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_webhook(listen="0.0.0.0", port=port, url_path=token, webhook_url=webhook_url)
+
+    logger.info(f"✅ Вебхук активен на порту {port}")
     try:
-        logger.info("Запуск приложения")
-        application = Application.builder().token("7027562944:AAHhp7ajrp28z7E8mlVkKth0P2BbP79v2LM").build()
-
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("setnick", setnick))
-        application.add_handler(MessageHandler(filters.TEXT & filters.Regex("Игра"), game))
-        application.add_handler(MessageHandler(filters.REPLY & ~filters.COMMAND, handle_nick_reply))
-        application.add_handler(CallbackQueryHandler(button))
-
-        logger.info("Настройка polling")
         while True:
-            try:
-                application.run_polling(
-                    allowed_updates=["message", "callback_query"],
-                    drop_pending_updates=True,
-                    close_loop=False
-                )
-                break
-            except Conflict as e:
-                logger.warning(f"Конфликт getUpdates: {e}. Повторная попытка через 5 секунд...")
-                asyncio.run(asyncio.sleep(5))
-    except Exception as e:
-        logger.error(f"Критическая ошибка при запуске: {e}", exc_info=True)
-        raise
-    finally:
-        logger.info("Инициируется завершение работы")
-        asyncio.run(shutdown(application))
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
