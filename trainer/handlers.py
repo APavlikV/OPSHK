@@ -81,7 +81,9 @@ async def show_next_move(context, chat_id, mode, sequence, step):
         )
     else:  # simple_fight
         text = (
-            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</███</code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n🎯 Контроль: <b>{control}</b>\n💥 Атака: <b>{attack}</b>"
+            f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
+            f"🎯 Контроль: <b>{control}</b>\n"
+            f"💥 Атака: <b>{attack}</b>"
         )
     reply_markup = answer_keyboard(send_hint=(mode == "simple_fight"))
     msg = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML")
@@ -141,10 +143,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("Переход в режим PvP: отображение меню")
         if "current_timer" in context.user_data:
             job = context.user_data["current_timer"]
-            job.data["active"] = False
-            job.schedule_removal()
+            if job and job.data.get("active", False):
+                job.data["active"] = False
+                try:
+                    job.schedule_removal()
+                    logger.info("Остановлен активный таймер перед входом в PvP")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить таймер: {e}")
             del context.user_data["current_timer"]
-            logger.info("Остановлен активный таймер перед входом в PvP")
         try:
             await query.edit_message_text(
                 "🥊 Бой с ботом: выберите действие:",
@@ -254,7 +260,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         step = context.user_data["step"] + 1
         context.user_data["step"] = step
         log = (
-            f"Схватка {step}:\n"
+            f"⚔️ Схватка {step}:\n"
             f"Тори <b>Вы</b>: Контроль {player_control} {'успех' if player_control_success else 'неуспех'} (+{1 if player_control_success else 0}), "
             f"Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} (+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0})\n"
             f"Уке <b>Бот</b>: Защита {bot_defense}, Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} (+{1 if bot_control_success else 0}), "
@@ -289,7 +295,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if mode == "timed_fight" and "current_timer" in context.user_data:
                 job = context.user_data["current_timer"]
                 job.data["active"] = False
-                job.schedule_removal()
+                try:
+                    job.schedule_removal()
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить таймер: {e}")
                 timer_ended = job.data.get("timer_ended", False)
                 del context.user_data["current_timer"]
                 if timer_ended:
