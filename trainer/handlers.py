@@ -241,6 +241,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_control = context.user_data["bot_control"]
         bot_attack = context.user_data["bot_attack"]
         bot_defense = random.choice(["Аге уке", "Сото уке", "Учи уке", "Гедан барай"])
+        player_name = context.user_data.get("nickname", "Вы")
 
         # Игрок атакует, бот защищается
         player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
@@ -279,16 +280,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         step = context.user_data["step"] + 1
         context.user_data["step"] = step
         log = (
-            f"⚔️ Схватка {step}:\n"
-            f"Тори <b>Вы</b>: Контроль {player_control} {'успех' if player_control_success else 'неуспех'} (+{1 if player_control_success else 0}), "
-            f"Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} (+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0})\n"
-            f"Уке <b>Бот</b>: Защита {bot_defense}, Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} (+{1 if bot_control_success else 0}), "
-            f"Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'} (+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0})\n"
-            f"Контратака: <b>Вы</b> {'успех' if player_counter_success else 'неуспех'} (+{1 if player_counter_success else 0}), "
-            f"<b>Бот</b> {'успех' if bot_counter_success else 'неуспех'} (+{1 if bot_counter_success else 0})\n"
-            f"Добивание: <b>Вы</b> {'успех' if player_dobivanie_success else 'неуспех'} (+{2 if player_dobivanie_success else 0}), "
-            f"<b>Бот</b> {'успех' if bot_dobivanie_success else 'неуспех'} (+{2 if bot_dobivanie_success else 0})\n"
-            f"Счёт: <b>Вы</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
+            f"<code>⚔️ Схватка {step}</code>\n\n"
+            f"<code>Тори</code> <b>{player_name}</b>:\n"
+            f"🎯 Контроль {player_control} {'успех' if player_control_success else 'неуспех'} (<b>+{1 if player_control_success else 0}</b>)\n"
+            f"💥 Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} (<b>+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0}</b>)\n\n"
+            f"<code>Уке</code> <b>Бот</b>:\n"
+            f"🛡️ Защита {bot_defense}\n"
+            f"🎯 Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} (<b>+{1 if bot_control_success else 0}</b>)\n"
+            f"💥 Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'} (<b>+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0}</b>)\n\n"
+            f"➡️ Контратака:\n"
+            f"<b>{player_name}</b> {'успех' if player_counter_success else 'неуспех'} (<b>+{1 if player_counter_success else 0}</b>)\n"
+            f"<b>Бот</b> {'успех' if bot_counter_success else 'неуспех'} (<b>+{1 if bot_counter_success else 0}</b>)\n\n"
+            f"🔥 Добивание:\n"
+            f"<b>{player_name}</b> {'успех' if player_dobivanie_success else 'неуспех'} (<b>+{2 if player_dobivanie_success else 0}</b>)\n"
+            f"<b>Бот</b> {'успех' if bot_dobivanie_success else 'неуспех'} (<b>+{2 if bot_dobivanie_success else 0}</b>)\n\n"
+            f"🥊 Счёт: <b>{player_name}</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
         )
         # Сначала отправляем лог схватки
         await query.message.reply_text(log, parse_mode="HTML")
@@ -298,8 +304,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except BadRequest as e:
             logger.warning(f"Не удалось удалить сообщение: {e}")
         if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
-            winner = "Вы" if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
-            await query.message.reply_text(f"Бой завершён! Победитель: {winner}", reply_markup=get_start_keyboard())
+            winner = player_name if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
+            winner_text = f"<b>🏆 {winner}</b>" if winner != "Ничья" else "<b>🏆 Ничья</b>"
+            await query.message.reply_text(
+                f"<b>Бой завершён!</b>\n\n"
+                f"<u>Со счётом {context.user_data['player_score']} - {context.user_data['bot_score']} одержал победу</u>\n\n"
+                f"{winner_text}",
+                reply_markup=get_start_keyboard(),
+                parse_mode="HTML"
+            )
             context.user_data.clear()
         else:
             context.user_data["player_control"] = None
