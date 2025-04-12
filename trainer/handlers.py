@@ -1,10 +1,9 @@
 from telegram.ext import ContextTypes
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
-from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
+from keyboards import menu_keyboard, training_fight_keyboard, training_rules_keyboard, training_memo_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
-from telegram.error import BadRequest
 import random
 
 logger = logging.getLogger(__name__)
@@ -17,26 +16,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
     if context.user_data is None:
         context.user_data = {}
-    
-    telegram_username = update.effective_user.username or update.effective_user.first_name
-    if telegram_username:
-        keyboard = [
-            [InlineKeyboardButton("Использовать Telegram", callback_data="use_telegram_nick")],
-            [InlineKeyboardButton("Выбрать свой", callback_data="choose_own_nick")]
-        ]
-        await update.message.reply_text(
-            f"<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n\n"
-            f"Использовать ваш <b>ник Telegram ({telegram_username})</b> или <b>выбрать свой?</b>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text(
-            "<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n\n"
-            "Введите ваш ник:",
-            parse_mode="HTML",
-            reply_markup=ForceReply(selective=True)
-        )
+    await update.message.reply_text(
+        "<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n\n"
+        "Введите ваш ник:",
+        parse_mode="HTML",
+        reply_markup=ForceReply(selective=True)
+    )
 
 async def setnick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /setnick")
@@ -98,26 +83,13 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"Осталось: {remaining} сек"
         )
         if remaining > 0:
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML"
-                )
-            except BadRequest as e:
-                if "Message to edit not found" in str(e):
-                    logger.info(f"Сообщение {message_id} уже удалено, пропускаем редактирование")
-                    job.data["active"] = False
-                    return
-                raise
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML"
+            )
         else:
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML"
-                )
-            except BadRequest as e:
-                if "Message to edit not found" in str(e):
-                    logger.info(f"Сообщение {message_id} уже удалено, пропускаем редактирование")
-                else:
-                    raise
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML"
+            )
             job.data["timer_ended"] = True
             job.data["active"] = False
     except Exception as e:
@@ -171,40 +143,32 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data is None:
         context.user_data = {}
 
-    if query.data == "use_telegram_nick":
-        telegram_username = update.effective_user.username or update.effective_user.first_name
-        context.user_data["nickname"] = telegram_username
-        try:
-            await query.message.reply_text(
-                f"Ник установлен: <b>{telegram_username}</b>\n"
-                "Готовы сразиться с <b>🥸 Bot Васей</b>?",
-                parse_mode="HTML",
-                reply_markup=get_start_keyboard()
-            )
-            await query.message.delete()
-        except BadRequest as e:
-            logger.warning(f"Ошибка при обработке use_telegram_nick: {e}")
-            await query.message.reply_text(
-                f"Ник установлен: <b>{telegram_username}</b>\n"
-                "Готовы сразиться с <b>🥸 Bot Васей</b>?",
-                parse_mode="HTML",
-                reply_markup=get_start_keyboard()
-            )
-    elif query.data == "choose_own_nick":
-        try:
-            await query.message.reply_text(
-                "Введите ваш ник:",
-                reply_markup=ForceReply(selective=True)
-            )
-            await query.message.delete()
-        except BadRequest as e:
-            logger.warning(f"Ошибка при обработке choose_own_nick: {e}")
-            await query.message.reply_text(
-                "Введите ваш ник:",
-                reply_markup=ForceReply(selective=True)
-            )
-    elif query.data == "training_fight":
-        await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
+    if query.data == "training_fight":
+        await query.edit_message_text(
+            "Выберите действие:",
+            reply_markup=training_fight_keyboard()
+        )
+    elif query.data == "training_rules":
+        await query.edit_message_text(
+            "<b>ПРАВИЛА ТРЕНИРОВКИ ЗАЩИТЫ</b>\n\n"
+            "Вам показывают комбинацию: <b>Контроль</b> и <b>Атака</b>.\n"
+            "Выберите правильную защиту из:\n"
+            "- Аге уке\n- Сото уке\n- Учи уке\n- Гедан барай\n\n"
+            "<b>Простой бой:</b> без времени, с подсказками.\n"
+            "<b>Бой на время:</b> 5 секунд на ход.",
+            reply_markup=training_rules_keyboard(),
+            parse_mode="HTML"
+        )
+    elif query.data == "training_memo":
+        await query.edit_message_text(
+            "<b>ПАМЯТКА ПО ЗАЩИТАМ</b>\n\n"
+            "<b>Аге уке:</b> защита от СС, контроль ТР.\n"
+            "<b>Сото уке:</b> защита от ТР, контроль ДЗ.\n"
+            "<b>Учи уке:</b> защита от ДЗ, контроль СС.\n"
+            "<b>Гедан барай:</b> защита от СС, контроль ДЗ.",
+            reply_markup=training_memo_keyboard(),
+            parse_mode="HTML"
+        )
     elif query.data in ["simple_fight", "timed_fight"]:
         context.user_data["fight_sequence"] = generate_fight_sequence()
         context.user_data["current_step"] = 0
@@ -232,26 +196,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
     elif query.data == "pvp_bot":
-        logger.info("Переход в режим PvP: отображение меню")
-        if "current_timer" in context.user_data:
-            job = context.user_data["current_timer"]
-            if job and job.data.get("active", False):
-                job.data["active"] = False
-                try:
-                    job.schedule_removal()
-                    logger.info("Остановлен активный таймер перед входом в PvP")
-                except Exception as e:
-                    logger.warning(f"Не удалось удалить таймер: {e}")
-            del context.user_data["current_timer"]
-        try:
-            await query.edit_message_text(
-                "🥊 Бой с ботом: выберите действие:",
-                reply_markup=pvp_bot_keyboard(),
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при редактировании сообщения в pvp_bot: {e}", exc_info=True)
-            await query.message.reply_text("Произошла ошибка. Попробуйте снова.", reply_markup=get_start_keyboard())
+        await query.edit_message_text(
+            "🥊 Спортивный бой с ботом: выберите действие:",
+            reply_markup=pvp_bot_keyboard(),
+            parse_mode="HTML"
+        )
     elif query.data == "pvp_rules":
         await query.edit_message_text(
             "<b>ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА</b>\n➖\n"
@@ -326,7 +275,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Игрок атакует, бот защищается
         player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
         player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
-        bot_control_defense_success = not player_control_success  # Бот защищает контроль игрока
+        bot_control_defense_success = not player_control_success
         bot_counter_success = bot_control_defense_success
         bot_attack_defense_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
         bot_dobivanie = player_control_success and bot_attack_defense_success
@@ -344,7 +293,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Бот атакует, игрок защищается
         bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
         bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
-        player_control_defense_success = not bot_control_success  # Игрок защищает контроль бота
+        player_control_defense_success = not bot_control_success
         player_counter_success = player_control_defense_success
         player_attack_defense_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
         player_dobivanie = bot_control_success and player_attack_defense_success
@@ -382,13 +331,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔥 <i>{'Добивание' if player_dobivanie else 'Защита от атаки'}:</i> {'✅' if player_dobivanie or player_attack_defense else '❌'} <b>(+{2 if player_dobivanie else 0})</b>\n\n"
             f"🥊 <i>Счёт:</i> <b>{player_name}</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
         )
-        # Сначала отправляем лог схватки
         await query.message.reply_text(log, parse_mode="HTML")
-        # Удаляем текущее сообщение
         try:
             await query.message.delete()
-        except BadRequest as e:
-            logger.warning(f"Не удалось удалить сообщение: {e}")
+        except Exception:
+            pass
         if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
             winner = player_name if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
             winner_text = f"<b>🏆 {winner}</b>" if winner != "Ничья" else "<b>🏆 Ничья</b>"
@@ -406,7 +353,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["player_defense"] = None
             context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
             context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
-            # Отправляем новое сообщение для следующего хода
             await query.message.reply_text(
                 f"<u>⚔️ Схватка {step + 1}</u>\n\n🎯 <i>Начните боевое действие!</i>\n<b>1. Выберите уровень контроля</b>",
                 reply_markup=pvp_attack_keyboard("control"),
@@ -423,8 +369,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 job.data["active"] = False
                 try:
                     job.schedule_removal()
-                except Exception as e:
-                    logger.warning(f"Не удалось удалить таймер: {e}")
+                except Exception:
+                    pass
                 timer_ended = job.data.get("timer_ended", False)
                 del context.user_data["current_timer"]
                 if timer_ended:
@@ -454,4 +400,4 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.clear()
             else:
                 context.user_data["current_step"] += 1
-                await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
+                await show_next_move(context, query.message.chat_id, mode, context.user_data["current_step"])
