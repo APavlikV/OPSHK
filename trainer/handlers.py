@@ -139,74 +139,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
-    elif query.data == "pvp_bot":
-        logger.info("Переход в режим PvP: отображение меню")
-        if "current_timer" in context.user_data:
-            job = context.user_data["current_timer"]
-            job.data["active"] = False
-            job.schedule_removal()
-            del context.user_data["current_timer"]
-            logger.info("Остановлен активный таймер перед входом в PvP")
-        await query.edit_message_text(
-            "🥊 Бой с ботом: выберите действие:",
-            reply_markup=pvp_bot_keyboard(),
-            parse_mode="HTML"
-        )
-    elif query.data == "pvp_rules":
-        await query.edit_message_text(
-            "<b>ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА</b>\n➖\n"
-            "Вы сражаетесь с <b>Bot Васей</b> за очки.\n\n"
-            "<u>Схватка:</u>\n"
-            "- Выбираете <b>Контроль</b> и <b>Атаку</b> (СС, ТР, ДЗ).\n"
-            "- Выбираете <b>Защиту</b> (Аге уке, Сото уке, Учи уке, Гедан барай).\n\n"
-            "<u>Очки:</u>\n"
-            "- Контроль: +1.\n"
-            "- Атака: +2 (если контроль успешен) или +1.\n"
-            "- Контратака: +1 (если защита от контроля).\n"
-            "- Добивание: +2 (если контратака и защита от атаки).\n\n"
-            "<u>Победа:</u>\n"
-            "- Разрыв в 8 очков или 5 минут.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Начать бой", callback_data="pvp_start")]]),
-            parse_mode="HTML"
-        )
-    elif query.data == "pvp_start":
-        context.user_data["pvp_mode"] = "sport"
-        context.user_data["player_score"] = 0
-        context.user_data["bot_score"] = 0
-        context.user_data["step"] = 0
-        context.user_data["player_control"] = None
-        context.user_data["player_attack"] = None
-        context.user_data["player_defense"] = None
-        context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
-        context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
-        await query.edit_message_text(
-            "Совершите атаку!\n1. Выберите уровень контроля",
-            reply_markup=pvp_attack_keyboard()
-        )
-    elif query.data.startswith("attack_control_"):
-        context.user_data["player_control"] = query.data.split("_")[2]
-        await query.edit_message_text(
-            "Завершите атаку!\n2. Выберите уровень атаки",
-            reply_markup=pvp_attack_keyboard()
-        )
-    elif query.data.startswith("attack_hit_"):
-        context.user_data["player_attack"] = query.data.split("_")[2]
-        await query.edit_message_text(
-            f"Ваша атака: Контроль {context.user_data['player_control']}, Атака {context.user_data['player_attack']}\nВыберите защиту:",
-            reply_markup=answer_keyboard()
-        )
-    elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"] and "pvp_mode" in context.user_data:
-        context.user_data["player_defense"] = query.data
-        await query.edit_message_text(
-            f"Ваш ход\n"
-            f"👊🏻Атака:\n"
-            f"<i>Контроль</i> <b>{context.user_data['player_control']}</b>,\n"
-            f"<i>Атака</i> <b>{context.user_data['player_attack']}</b>\n"
-            f"🛡 Защита: <b>{context.user_data['player_defense']}</b>\n"
-            f"Подтвердите:",
-            reply_markup=pvp_move_keyboard(),
-            parse_mode="HTML"
-        )
     elif query.data == "pvp_move":
         player_control = context.user_data["player_control"]
         player_attack = context.user_data["player_attack"]
@@ -263,7 +195,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Бот</b> {'успех' if bot_dobivanie_success else 'неуспех'} (+{2 if bot_dobivanie_success else 0})\n"
             f"Счёт: <b>Вы</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
         )
-        await query.edit_message_text(log, parse_mode="HTML")
+        await query.message.reply_text(log, parse_mode="HTML")  # Отправляем лог как новое сообщение
         if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
             winner = "Вы" if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
             await query.message.reply_text(f"Бой завершён! Победитель: {winner}", reply_markup=get_start_keyboard())
