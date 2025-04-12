@@ -5,6 +5,8 @@ from texts import TEXTS
 
 def generate_fight_sequence():
     """Генерирует последовательность ходов для тренировочного боя."""
+    if not MOVES:
+        raise ValueError("MOVES is empty")
     return random.sample(MOVES, len(MOVES))
 
 
@@ -13,6 +15,8 @@ def check_move(control, attack, chosen_defense):
     Проверяет, успешна ли защита против контроля и атаки.
     Возвращает (is_success, partial_success, correct_answer).
     """
+    if chosen_defense not in DEFENSE_MOVES:
+        return False, False, None
     defense_data = DEFENSE_MOVES[chosen_defense]
     control_success = control == defense_data["control"]
     attack_success = attack in defense_data["attack_defense"]
@@ -48,12 +52,21 @@ def generate_short_log(step, control, attack, chosen_defense, is_success, partia
 
 def generate_detailed_log(control, attack, chosen_defense, is_success):
     """Генерирует подробный лог схватки."""
-    defense_data = DEFENSE_MOVES[chosen_defense]
-    control_success = control == defense_data["control"]
-    attack_success = attack in defense_data["attack_defense"]
+    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
+    control_success = control == defense_data.get("control", "")
+    attack_success = attack in defense_data.get("attack_defense", [])
 
-    attack_phrase = random.choice(ATTACK_PHRASES[attack])
-    defense_phrase = random.choice(DEFENSE_PHRASES[chosen_defense])
+    # Проверка валидности атаки
+    attack_phrase = (
+        random.choice(ATTACK_PHRASES.get(attack, ["Неизвестная атака"]))
+        if attack in ATTACK_PHRASES
+        else "⚠️ Некорректная атака"
+    )
+    defense_phrase = (
+        random.choice(DEFENSE_PHRASES.get(chosen_defense, ["Неизвестная защита"]))
+        if chosen_defense in DEFENSE_PHRASES
+        else "⚠️ Некорректная защита"
+    )
 
     log = f"{attack_phrase}\n"
     log += f"🛡️ Вы: {defense_phrase}\n"
@@ -91,10 +104,10 @@ def calculate_pvp_scores(player_control, player_attack, player_defense, bot_cont
     bot_score_delta = 0
 
     # Игрок атакует, бот защищается
-    player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
-    player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    player_control_success = DEFENSE_MOVES.get(bot_defense, {}).get("control", "") != player_control
+    player_attack_success = player_attack not in DEFENSE_MOVES.get(bot_defense, {}).get("attack_defense", [])
     bot_control_defense_success = not player_control_success
-    bot_attack_defense_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    bot_attack_defense_success = player_attack not in DEFENSE_MOVES.get(bot_defense, {}).get("attack_defense", [])
     bot_dobivanie = bot_control_defense_success and bot_attack_defense_success
     bot_attack_defense = not bot_control_defense_success and bot_attack_defense_success
 
@@ -110,10 +123,10 @@ def calculate_pvp_scores(player_control, player_attack, player_defense, bot_cont
         bot_score_delta += 1
 
     # Бот атакует, игрок защищается
-    bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
-    bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    bot_control_success = DEFENSE_MOVES.get(player_defense, {}).get("control", "") != bot_control
+    bot_attack_success = bot_attack not in DEFENSE_MOVES.get(player_defense, {}).get("attack_defense", [])
     player_control_defense_success = not bot_control_success
-    player_attack_defense_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    player_attack_defense_success = bot_attack not in DEFENSE_MOVES.get(player_defense, {}).get("attack_defense", [])
     player_dobivanie = player_control_defense_success and player_attack_defense_success
     player_attack_defense = not player_control_defense_success and player_attack_defense_success
 
@@ -134,18 +147,18 @@ def calculate_pvp_scores(player_control, player_attack, player_defense, bot_cont
 def generate_pvp_log(step, player_name, player_control, player_attack, player_defense, bot_control, bot_attack, bot_defense, player_score, bot_score):
     """Форматирует лог PvP схватки."""
     # Игрок атакует, бот защищается
-    player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
-    player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    player_control_success = DEFENSE_MOVES.get(bot_defense, {}).get("control", "") != player_control
+    player_attack_success = player_attack not in DEFENSE_MOVES.get(bot_defense, {}).get("attack_defense", [])
     bot_control_defense_success = not player_control_success
-    bot_attack_defense_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    bot_attack_defense_success = player_attack not in DEFENSE_MOVES.get(bot_defense, {}).get("attack_defense", [])
     bot_dobivanie = bot_control_defense_success and bot_attack_defense_success
     bot_attack_defense = not bot_control_defense_success and bot_attack_defense_success
 
     # Бот атакует, игрок защищается
-    bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
-    bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    bot_control_success = DEFENSE_MOVES.get(player_defense, {}).get("control", "") != bot_control
+    bot_attack_success = bot_attack not in DEFENSE_MOVES.get(player_defense, {}).get("attack_defense", [])
     player_control_defense_success = not bot_control_success
-    player_attack_defense_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    player_attack_defense_success = bot_attack not in DEFENSE_MOVES.get(player_defense, {}).get("attack_defense", [])
     player_dobivanie = player_control_defense_success and player_attack_defense_success
     player_attack_defense = not player_control_defense_success and player_attack_defense_success
 
