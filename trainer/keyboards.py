@@ -38,7 +38,7 @@ def answer_keyboard(send_hint=False):
         [InlineKeyboardButton("Учи уке", callback_data="Учи уке"), InlineKeyboardButton("Гедан барай", callback_data="Гедан барай")]
     ]
     if send_hint:
-        keyboard.append([InlineKeyboardButton("💡Подсказка", callback_data="hint")])
+        keyboard.append([InlineKeyboardButton("💡 Подсказка", callback_data="hint")])
     return InlineKeyboardMarkup(keyboard)
 
 def pvp_bot_keyboard():
@@ -50,8 +50,8 @@ def pvp_bot_keyboard():
 
 def pvp_attack_keyboard(mode):
     keyboard = [
-        [InlineKeyboardButton("СС", callback_data=f"attack_{mode}_СС"), InlineKeyboardButton("ТР", callback_data=f"attack_{mode}_ТР")],
-        [InlineKeyboardButton("ДЗ", callback_data=f"attack_{mode}_ДЗ")]
+        [InlineKeyboardButton("ДЗ", callback_data=f"attack_{mode}_ДЗ")],
+        [InlineKeyboardButton("СС", callback_data=f"attack_{mode}_СС"), InlineKeyboardButton("ТР", callback_data=f"attack_{mode}_ТР")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
