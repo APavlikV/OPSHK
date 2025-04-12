@@ -1,5 +1,5 @@
-from telegram.ext import ContextTypes
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ContextTypes, CommandHandler
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
@@ -17,11 +17,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /start")
     if context.user_data is None:
         context.user_data = {}
+    
+    telegram_username = update.effective_user.username or update.effective_user.first_name
+    if telegram_username:
+        keyboard = [
+            [InlineKeyboardButton("Использовать Telegram", callback_data="use_telegram_nick")],
+            [InlineKeyboardButton("Выбрать свой", callback_data="choose_own_nick")]
+        ]
+        await update.message.reply_text(
+            f"🥋 Добро пожаловать в КАРАТЭ тренажер!\n"
+            f"Использовать ваш ник Telegram ({telegram_username}) или выбрать свой?",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.message.reply_text(
+            "🥋 Добро пожаловать в КАРАТЭ тренажер!\n"
+            "Введите ваш ник:",
+            parse_mode="HTML",
+            reply_markup=ForceReply(selective=True)
+        )
+
+async def setnick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Получена команда /setnick")
     await update.message.reply_text(
-        "🥋 Добро пожаловать в КАРАТЭ тренажер!\nСразитесь с <b>🥸 Bot Васей</b> и проверьте свои навыки!",
-        parse_mode="HTML",
-        reply_markup=get_start_keyboard()
+        "Введите ваш новый ник:",
+        reply_markup=ForceReply(selective=True)
     )
+
+async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.reply_to_message:
+        return
+    nick = update.message.text.strip()
+    if len(nick) > 20:
+        await update.message.reply_text(
+            "Ник слишком длинный! Максимум 20 символов.",
+            reply_markup=get_start_keyboard()
+        )
+    elif nick:
+        context.user_data["nickname"] = nick
+        await update.message.reply_text(
+            f"Ник установлен: {nick}\n"
+            "Готовы сразиться с <b>🥸 Bot Васей</b>?",
+            parse_mode="HTML",
+            reply_markup=get_start_keyboard()
+        )
+    else:
+        context.user_data["nickname"] = "Вы"
+        await update.message.reply_text(
+            "Ник не указан, используем 'Вы'.\n"
+            "Готовы сразиться с <b>🥸 Bot Васей</b>?",
+            parse_mode="HTML",
+            reply_markup=get_start_keyboard()
+        )
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Нажата кнопка 'Игра'")
@@ -123,7 +171,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data is None:
         context.user_data = {}
 
-    if query.data == "training_fight":
+    if query.data == "use_telegram_nick":
+        telegram_username = update.effective_user.username or update.effective_user.first_name
+        context.user_data["nickname"] = telegram_username
+        await query.edit_message_text(
+            f"Ник установлен: {telegram_username}\n"
+            "Готовы сразиться с <b>🥸 Bot Васей</b>?",
+            parse_mode="HTML",
+            reply_markup=get_start_keyboard()
+        )
+    elif query.data == "choose_own_nick":
+        await query.edit_message_text(
+            "Введите ваш ник:",
+            reply_markup=ForceReply(selective=True)
+        )
+    elif query.data == "training_fight":
         await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
     elif query.data in ["simple_fight", "timed_fight"]:
         context.user_data["fight_sequence"] = generate_fight_sequence()
@@ -246,8 +308,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Игрок атакует, бот защищается
         player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
         player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
-        bot_counter_success = not player_control_success
-        bot_dobivanie_success = bot_counter_success and player_attack not in DEFENSE_MOVES[bot_defense]["counter"]
+        bot_control_defense_success = not player_control_success  # Бот защищает контроль игрока
+        bot_counter_success = bot_control_defense_success
+        bot_attack_defense_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+        bot_dobivanie = player_control_success and bot_attack_defense_success
+        bot_attack_defense = not player_control_success and bot_attack_defense_success
 
         if player_control_success:
             context.user_data["player_score"] += 1
@@ -257,14 +322,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["player_score"] += 1
         if bot_counter_success:
             context.user_data["bot_score"] += 1
-            if bot_dobivanie_success:
-                context.user_data["bot_score"] += 2
 
         # Бот атакует, игрок защищается
         bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
         bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
-        player_counter_success = not bot_control_success
-        player_dobivanie_success = player_counter_success and bot_attack not in DEFENSE_MOVES[player_defense]["counter"]
+        player_control_defense_success = not bot_control_success  # Игрок защищает контроль бота
+        player_counter_success = player_control_defense_success
+        player_attack_defense_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+        player_dobivanie = bot_control_success and player_attack_defense_success
+        player_attack_defense = not bot_control_success and player_attack_defense_success
 
         if bot_control_success:
             context.user_data["bot_score"] += 1
@@ -274,26 +340,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["bot_score"] += 1
         if player_counter_success:
             context.user_data["player_score"] += 1
-            if player_dobivanie_success:
-                context.user_data["player_score"] += 2
 
         step = context.user_data["step"] + 1
         context.user_data["step"] = step
         log = (
             f"<code>⚔️ Схватка {step}</code>\n\n"
             f"<code>Тори</code> <b>{player_name}</b>:\n"
-            f"🎯 Контроль {player_control} {'успех' if player_control_success else 'неуспех'} (<b>+{1 if player_control_success else 0}</b>)\n"
-            f"💥 Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} (<b>+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0}</b>)\n\n"
+            f"🎯 Контроль {player_control} {'успех' if player_control_success else 'неуспех'} {'✅' if player_control_success else '❌'} (<b>+{1 if player_control_success else 0}</b>)\n"
+            f"💥 Атака {player_attack} {'успех' if player_attack_success else 'неуспех'} {'✅' if player_attack_success else '❌'} (<b>+{2 if player_control_success and player_attack_success else 1 if player_attack_success else 0}</b>)\n\n"
             f"<code>Уке</code> <b>Бот</b>:\n"
             f"🛡️ Защита {bot_defense}\n"
-            f"🎯 Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} (<b>+{1 if bot_control_success else 0}</b>)\n"
-            f"💥 Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'} (<b>+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0}</b>)\n\n"
-            f"➡️ Контратака:\n"
-            f"<b>{player_name}</b> {'успех' if player_counter_success else 'неуспех'} (<b>+{1 if player_counter_success else 0}</b>)\n"
-            f"<b>Бот</b> {'успех' if bot_counter_success else 'неуспех'} (<b>+{1 if bot_counter_success else 0}</b>)\n\n"
-            f"🔥 Добивание:\n"
-            f"<b>{player_name}</b> {'успех' if player_dobivanie_success else 'неуспех'} (<b>+{2 if player_dobivanie_success else 0}</b>)\n"
-            f"<b>Бот</b> {'успех' if bot_dobivanie_success else 'неуспех'} (<b>+{2 if bot_dobivanie_success else 0}</b>)\n\n"
+            f"🛑 Защита контроля: {'успех' if bot_control_defense_success else 'неуспех'} {'✅' if bot_control_defense_success else '❌'} (<b>+{1 if bot_control_defense_success else 0}</b>)\n"
+            f"➡️ Контратака: {'успех' if bot_counter_success else 'неуспех'} {'✅' if bot_counter_success else '❌'} (<b>+{1 if bot_counter_success else 0}</b>)\n"
+            f"🔥 {'Добивание' if bot_dobivanie else 'Защита от атаки'}: {'успех' if bot_dobivanie or bot_attack_defense else 'неуспех'} {'✅' if bot_dobivanie or bot_attack_defense else '❌'} (<b>+{2 if bot_dobivanie else 0}</b>)\n\n"
+            f"--------\n\n"
+            f"<code>Тори</code> <b>Бот</b>:\n"
+            f"🎯 Контроль {bot_control} {'успех' if bot_control_success else 'неуспех'} {'✅' if bot_control_success else '❌'} (<b>+{1 if bot_control_success else 0}</b>)\n"
+            f"💥 Атака {bot_attack} {'успех' if bot_attack_success else 'неуспех'} {'✅' if bot_attack_success else '❌'} (<b>+{2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0}</b>)\n\n"
+            f"<code>Уке</code> <b>{player_name}</b>:\n"
+            f"🛡️ Защита {player_defense}\n"
+            f"🛑 Защита контроля: {'успех' if player_control_defense_success else 'неуспех'} {'✅' if player_control_defense_success else '❌'} (<b>+{1 if player_control_defense_success else 0}</b>)\n"
+            f"➡️ Контратака: {'успех' if player_counter_success else 'неуспех'} {'✅' if player_counter_success else '❌'} (<b>+{1 if player_counter_success else 0}</b>)\n"
+            f"🔥 {'Добивание' if player_dobivanie else 'Защита от атаки'}: {'успех' if player_dobivanie or player_attack_defense else 'неуспех'} {'✅' if player_dobivanie or player_attack_defense else '❌'} (<b>+{2 if player_dobivanie else 0}</b>)\n\n"
             f"🥊 Счёт: <b>{player_name}</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
         )
         # Сначала отправляем лог схватки
@@ -369,3 +437,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 context.user_data["current_step"] += 1
                 await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
+
+def setup_application(application):
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("setnick", setnick))
+    application.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))
+    # Другие обработчики добавляются здесь
