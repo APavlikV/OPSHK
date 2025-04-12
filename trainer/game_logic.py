@@ -55,12 +55,8 @@ def generate_detailed_log(control, attack, chosen_defense, is_success):
         f"<b>Детали:</b>\n"
         f"🥸 <b>Bot Вася</b> {control_phrase} {attack_phrase}\n"
         f"{defense_phrase}\n"
+        f"{counter_phrase}"
     )
-    
-    if is_success:
-        text += f"{counter_phrase}"
-    else:
-        text += f"{counter_phrase}"
     
     return text
 
