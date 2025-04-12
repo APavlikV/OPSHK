@@ -3,6 +3,7 @@ from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKe
 from keyboards import menu_keyboard, training_fight_keyboard, training_rules_keyboard, training_memo_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
+from database import get_nickname, set_nickname
 import logging
 from telegram.error import BadRequest
 import random
@@ -18,25 +19,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data is None:
         context.user_data = {}
     
-    telegram_username = update.effective_user.username or update.effective_user.first_name
-    if telegram_username:
-        keyboard = [
-            [InlineKeyboardButton("Использовать Telegram", callback_data="use_telegram_nick")],
-            [InlineKeyboardButton("Выбрать свой", callback_data="choose_own_nick")]
-        ]
+    user_id = update.effective_user.id
+    saved_nickname = get_nickname(user_id)
+    
+    if saved_nickname:
+        context.user_data["nickname"] = saved_nickname
         await update.message.reply_text(
-            f"<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n"
-            f"Использовать ваш <b>ник Telegram ({telegram_username})</b> или <b>выбрать свой?</b>",
+            f"<b>🥋 Добро пожаловать обратно, {saved_nickname}!</b>\n"
+            f"Готовы сразиться с <b>🥸 Bot Васей</b>?",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=get_start_keyboard()
         )
     else:
-        await update.message.reply_text(
-            "<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n"
-            "Введите ваш ник:",
-            parse_mode="HTML",
-            reply_markup=ForceReply(selective=True)
-        )
+        telegram_username = update.effective_user.username or update.effective_user.first_name
+        if telegram_username:
+            keyboard = [
+                [InlineKeyboardButton("Использовать Telegram", callback_data="use_telegram_nick")],
+                [InlineKeyboardButton("Выбрать свой", callback_data="choose_own_nick")]
+            ]
+            await update.message.reply_text(
+                f"<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n"
+                f"Использовать ваш <b>ник Telegram ({telegram_username})</b> или <b>выбрать свой?</b>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.message.reply_text(
+                "<b>🥋 Добро пожаловать в КАРАТЭ тренажер!</b>\n"
+                "Введите ваш ник:",
+                parse_mode="HTML",
+                reply_markup=ForceReply(selective=True)
+            )
 
 async def setnick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Получена команда /setnick")
@@ -49,6 +62,7 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
         return
     nick = update.message.text.strip()
+    user_id = update.effective_user.id
     if len(nick) > 20:
         await update.message.reply_text(
             "Ник слишком длинный! Максимум 20 символов.",
@@ -56,6 +70,7 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif nick:
         context.user_data["nickname"] = nick
+        set_nickname(user_id, nick)
         await update.message.reply_text(
             f"Ник установлен: <b>{nick}</b>\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
@@ -63,7 +78,9 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_start_keyboard()
         )
     else:
-        context.user_data["nickname"] = "Вы"
+        nick = "Вы"
+        context.user_data["nickname"] = nick
+        set_nickname(user_id, nick)
         await update.message.reply_text(
             "Ник не указан, используем <b>Вы</b>.\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
@@ -173,7 +190,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "use_telegram_nick":
         telegram_username = update.effective_user.username or update.effective_user.first_name
+        user_id = update.effective_user.id
         context.user_data["nickname"] = telegram_username
+        set_nickname(user_id, telegram_username)
         await query.message.reply_text(
             f"Ник установлен: <b>{telegram_username}</b>\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
