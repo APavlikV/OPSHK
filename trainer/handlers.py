@@ -522,5 +522,5 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())
                 context.user_data.clear()
             else:
-                context.user_data["current_step"] = 1
+                context.user_data["current_step"] += 1
                 await show_next_move(context, query.message.chat_id, mode, sequence, context.user_data["current_step"])
