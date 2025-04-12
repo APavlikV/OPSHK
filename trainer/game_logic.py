@@ -1,44 +1,99 @@
-import random
-from data import MOVES, DEFENSE_MOVES, ATTACK_PHRASES, DEFENSE_PHRASES
+# ... (предыдущий код без изменений: generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats)
 
-def generate_fight_sequence():
-    sequence = MOVES.copy()
-    random.shuffle(sequence)
-    return sequence
+def calculate_pvp_scores(player_control, player_attack, player_defense, bot_control, bot_attack, bot_defense):
+    """Рассчитывает очки для PvP схватки."""
+    player_score_delta = 0
+    bot_score_delta = 0
 
-def check_move(control, attack, chosen_defense):
-    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-    control_success = control == defense_data.get("control")
-    attack_success = attack in defense_data.get("attack_defense", [])
-    is_success = control_success and attack_success
-    partial_success = not control_success and attack_success
-    correct_answer = next((move for move, data in DEFENSE_MOVES.items() if control == data["control"] and attack in data["attack_defense"]), None)
-    return is_success, partial_success, correct_answer
+    # Игрок атакует, бот защищается
+    player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
+    player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    bot_control_defense_success = not player_control_success
+    bot_attack_defense_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    bot_dobivanie = bot_control_defense_success and bot_attack_defense_success
+    bot_attack_defense = not bot_control_defense_success and bot_attack_defense_success
 
-def generate_short_log(step, control, attack, chosen_defense, is_success, partial_success, correct_answer):
-    result_emoji = "🟢" if is_success else "🟠" if partial_success else "🔴"
-    return f"<u>Атака {step + 1}</u>\n" \
-           f"Контроль: {control}\n" \
-           f"Атака: {attack}\n" \
-           f"Защита и контратака: {chosen_defense}\n" \
-           f"{result_emoji} <b>{'УСПЕХ' if is_success else 'ПОРАЖЕНИЕ'}</b>" + (f" (правильно: {correct_answer})" if not is_success and correct_answer else "")
+    if player_control_success:
+        player_score_delta += 1
+    if player_attack_success:
+        player_score_delta += (2 if player_control_success else 1)
+    if bot_control_defense_success:
+        bot_score_delta += 1
+    if bot_dobivanie:
+        bot_score_delta += 2
+    elif bot_attack_defense:
+        bot_score_delta += 1
 
-def generate_detailed_log(control, attack, chosen_defense, is_success):
-    attacker_control_success = random.choice([True, False])
-    attacker_attack_success = random.choice([True, False])
-    defense_data = DEFENSE_MOVES.get(chosen_defense, {})
-    counter_zone = random.choice(defense_data.get("counter", ["ДЗ"])) if is_success else random.choice(["ГДН", "СС", "ТР", "ДЗ"])
-    
-    attacker_name = "<b>Bot Вася</b>"
-    attack_text = f"{attacker_name} {'яростно атаковал' if attacker_attack_success else 'недолго думая ринулся в атаку'}: " \
-                  f"<i>{random.choice(ATTACK_PHRASES['control_success' if attacker_control_success else 'control_fail'][control])}</i> " \
-                  f"<i>{random.choice(ATTACK_PHRASES['attack_success' if attacker_attack_success else 'attack_fail'][attack])}</i> ⚔️ "
-    defense_text = f"{random.choice(DEFENSE_PHRASES['defense_success' if control == defense_data.get('control') else 'defense_fail'][control if control == defense_data.get('control') else random.choice(list(DEFENSE_PHRASES['defense_fail'].keys()))])} " \
-                   f"{random.choice(DEFENSE_PHRASES['counter_success' if is_success else 'counter_fail'][chosen_defense])}"
-    return f"{attack_text}{defense_text}"
+    # Бот атакует, игрок защищается
+    bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
+    bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    player_control_defense_success = not bot_control_success
+    player_attack_defense_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    player_dobivanie = player_control_defense_success and player_attack_defense_success
+    player_attack_defense = not player_control_defense_success and player_attack_defense_success
 
-def generate_final_stats(correct_count, control_count, hint_count, total):
-    return f"<b>Статистика боя:</b>\n" \
-           f"Правильных: {correct_count}, с подсказкой: {hint_count}, из {total}\n" \
-           f"Отбито {control_count} из {total} контролей\n" \
-           f"Пропущено {total - correct_count} атак"
+    if bot_control_success:
+        bot_score_delta += 1
+    if bot_attack_success:
+        bot_score_delta += (2 if bot_control_success else 1)
+    if player_control_defense_success:
+        player_score_delta += 1
+    if player_dobivanie:
+        player_score_delta += 2
+    elif player_attack_defense:
+        player_score_delta += 1
+
+    return player_score_delta, bot_score_delta
+
+def generate_pvp_log(step, player_name, player_control, player_attack, player_defense, bot_control, bot_attack, bot_defense, player_score, bot_score):
+    """Форматирует лог PvP схватки."""
+    # Игрок атакует, бот защищается
+    player_control_success = DEFENSE_MOVES[bot_defense]["control"] != player_control
+    player_attack_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    bot_control_defense_success = not player_control_success
+    bot_attack_defense_success = player_attack not in DEFENSE_MOVES[bot_defense]["attack_defense"]
+    bot_dobivanie = bot_control_defense_success and bot_attack_defense_success
+    bot_attack_defense = not bot_control_defense_success and bot_attack_defense_success
+
+    # Бот атакует, игрок защищается
+    bot_control_success = DEFENSE_MOVES[player_defense]["control"] != bot_control
+    bot_attack_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    player_control_defense_success = not bot_control_success
+    player_attack_defense_success = bot_attack not in DEFENSE_MOVES[player_defense]["attack_defense"]
+    player_dobivanie = player_control_defense_success and player_attack_defense_success
+    player_attack_defense = not player_control_defense_success and player_attack_defense_success
+
+    return TEXTS["pvp_log_template"].format(
+        step=step,
+        player_name=player_name,
+        player_control=player_control,
+        player_control_result="✅" if player_control_success else "❌",
+        player_control_points=1 if player_control_success else 0,
+        player_attack=player_attack,
+        player_attack_result="✅" if player_attack_success else "❌",
+        player_attack_points=2 if player_control_success and player_attack_success else 1 if player_attack_success else 0,
+        bot_defense=bot_defense,
+        bot_control_defense_result="✅" if bot_control_defense_success else "❌",
+        bot_control_defense_points=1 if bot_control_defense_success else 0,
+        bot_counter_result="✅" if bot_control_defense_success else "❌",
+        bot_counter_points=1 if bot_control_defense_success else 0,
+        bot_dobivanie_text="Добивание" if bot_dobivanie else "Защита от атаки",
+        bot_dobivanie_result="✅" if bot_dobivanie or bot_attack_defense else "❌",
+        bot_dobivanie_points=2 if bot_dobivanie else 1 if bot_attack_defense else 0,
+        bot_control=bot_control,
+        bot_control_result="✅" if bot_control_success else "❌",
+        bot_control_points=1 if bot_control_success else 0,
+        bot_attack=bot_attack,
+        bot_attack_result="✅" if bot_attack_success else "❌",
+        bot_attack_points=2 if bot_control_success and bot_attack_success else 1 if bot_attack_success else 0,
+        player_defense=player_defense,
+        player_control_defense_result="✅" if player_control_defense_success else "❌",
+        player_control_defense_points=1 if player_control_defense_success else 0,
+        player_counter_result="✅" if player_control_defense_success else "❌",
+        player_counter_points=1 if player_control_defense_success else 0,
+        player_dobivanie_text="Добивание" if player_dobivanie else "Защита от атаки",
+        player_dobivanie_result="✅" if player_dobivanie or player_attack_defense else "❌",
+        player_dobivanie_points=2 if player_dobivanie else 1 if player_attack_defense else 0,
+        player_score=player_score,
+        bot_score=bot_score
+    )
