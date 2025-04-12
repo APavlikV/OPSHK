@@ -187,25 +187,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "pvp_rules":
         rules_text = (
-            "📜 <b>Правила спортивного боя:</b>\n\n"
-            "1. Бой состоит из 5 схваток.\n"
-            "2. Вы и бот поочерёдно атакуете и защищаетесь.\n"
-            "3. Атака состоит из:\n"
-            "   - <b>Контроль</b> (СС, ТР).\n"
-            "   - <b>Атака</b> (СС, ТР, ДЗ).\n"
-            "4. Защита выбирается из: Аге уке, Учи уке, Сото уке, Гедан барай.\n"
-            "5. Очки начисляются:\n"
-            "   - 🎯 Успешный контроль: +1\n"
-            "   - 💥 Успешная атака: +1\n"
-            "   - 🛑 Успешная защита от контроля: +1\n"
-            "   - ➡️ Успешная контратака: +1\n"
-            "   - 🔥 Успешная защита от атаки: +1\n"
-            "6. Побеждает набравший больше очков.\n\n"
-            "Выберите действие:"
+            "ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА\n"
+            "➖\n"
+            "Вы сражаетесь с 🥸 Bot Васей на счёт.\n\n"
+            "Схватка:\n"
+            "- Выбираете уровни 🎯 Контроля и 💥 Атаки (СС, ТР, ДЗ).\n"
+            "- Выбираете 🛡️ Защиту (Аге уке, Сото уке, Учи уке, Гедан барай).\n\n"
+            "Начисление баллов:\n"
+            "Тори:\n"
+            "- 🎯 Контроль: +1.\n"
+            "- 💥 Атака: +2 (если Контроль успешен ✅) или +1.\n"
+            "Уке:\n"
+            "- ➡️ Контратака: +1 (если защита от контроля удалась ✅).\n"
+            "- 🔥 Добивание: +2 (если защита от Контроля и Защита от атаки успешны ✅).\n"
+            "- 🛑 Защита от атаки: +1 (если защита от Контроля не удалась ❌, но Защита от атаки успешна ✅).\n\n"
+            "🏆 Победа:\n"
+            "- Победа за тем, кто за 5 схваток наберёт большее количество очков."
         )
         await query.edit_message_text(
             rules_text,
-            reply_markup=pvp_bot_keyboard(),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Начать бой", callback_data="pvp_start")]
+            ]),
             parse_mode="HTML"
         )
 
@@ -219,8 +222,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["player_defense"] = None
         context.user_data["log"] = []
         await query.edit_message_text(
-            f"<u>⚔️ Схватка 1</u>\n\n"
-            f"<b>👊 Атака:</b> Выберите контроль:",
+            f"<u>⚔️ Схватка {context.user_data['step']}</u>\n\n"
+            f"🎯 Начните боевое действие!\n"
+            f"1. Выберите уровень контроля",
             reply_markup=pvp_attack_keyboard("control"),
             parse_mode="HTML"
         )
@@ -233,7 +237,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 f"<u>⚔️ Схватка {context.user_data['step']}</u>\n\n"
                 f"Ваш контроль: <b>{control}</b>\n"
-                f"<b>👊 Выберите атаку:</b>",
+                f"💥 Выберите атаку:",
                 reply_markup=pvp_attack_keyboard("attack"),
                 parse_mode="HTML"
             )
@@ -244,12 +248,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("attack_hit_"):
         if not context.user_data.get("player_control"):
             logger.warning("Попытка выбрать атаку без контроля")
-            await query.edit_message_text(
+            # Проверяем, чтобы не отправлять тот же текст
+            current_text = query.message.text or ""
+            new_text = (
                 f"<u>⚔️ Схватка {context.user_data['step']}</u>\n\n"
-                f"<b>👊 Атака:</b> Сначала выберите контроль:",
-                reply_markup=pvp_attack_keyboard("control"),
-                parse_mode="HTML"
+                f"🎯 Сначала выберите уровень контроля!"
             )
+            if current_text.strip() != new_text.strip():
+                await query.edit_message_text(
+                    new_text,
+                    reply_markup=pvp_attack_keyboard("control"),
+                    parse_mode="HTML"
+                )
             return
         attack = query.data.split("_")[2]
         logger.info(f"Выбрана атака: {attack}")
@@ -305,17 +315,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         player_score = (
             (1 if bot_result["control_success"] else 0) +
-            (1 if bot_result["attack_success"] else 0) +
+            (2 if bot_result["attack_success"] and bot_result["control_success"] else 1 if bot_result["attack_success"] else 0) +
             (1 if player_result["defense_control_success"] else 0) +
             (1 if player_result["counter_success"] else 0) +
-            (1 if player_result["defense_attack_success"] else 0)
+            (2 if player_result["defense_control_success"] and player_result["defense_attack_success"] else 1 if player_result["defense_attack_success"] else 0)
         )
         bot_score = (
             (1 if player_result["control_success"] else 0) +
-            (1 if player_result["attack_success"] else 0) +
+            (2 if player_result["attack_success"] and player_result["control_success"] else 1 if player_result["attack_success"] else 0) +
             (1 if bot_result["defense_control_success"] else 0) +
             (1 if bot_result["counter_success"] else 0) +
-            (1 if bot_result["defense_attack_success"] else 0)
+            (2 if bot_result["defense_control_success"] and bot_result["defense_attack_success"] else 1 if bot_result["defense_attack_success"] else 0)
         )
 
         context.user_data["player_score"] += player_score
@@ -325,21 +335,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<u>⚔️ Схватка {context.user_data['step']}</u>\n\n"
             f"<b>Тори Вы:</b>\n"
             f"🎯 Контроль {player_control} {'✅' if bot_result['control_success'] else '❌'} (+{1 if bot_result['control_success'] else 0})\n"
-            f"💥 Атака {player_attack} {'✅' if bot_result['attack_success'] else '❌'} (+{1 if bot_result['attack_success'] else 0})\n\n"
+            f"💥 Атака {player_attack} {'✅' if bot_result['attack_success'] else '❌'} (+{2 if bot_result['attack_success'] and bot_result['control_success'] else 1 if bot_result['attack_success'] else 0})\n\n"
             f"<b>Уке Бот:</b>\n"
             f"🛡️ Защита {bot_defense}\n"
             f"🛑 Защита контроля: {'✅' if bot_result['defense_control_success'] else '❌'} (+{1 if bot_result['defense_control_success'] else 0})\n"
             f"➡️ Контратака: {'✅' if bot_result['counter_success'] else '❌'} (+{1 if bot_result['counter_success'] else 0})\n"
-            f"🔥 Защита от атаки: {'✅' if bot_result['defense_attack_success'] else '❌'} (+{1 if bot_result['defense_attack_success'] else 0})\n\n"
+            f"🔥 Добивание: {'✅' if bot_result['defense_control_success'] and bot_result['defense_attack_success'] else '❌'} (+{2 if bot_result['defense_control_success'] and bot_result['defense_attack_success'] else 1 if bot_result['defense_attack_success'] else 0})\n\n"
             f"--------\n\n"
             f"<b>Тори Бот:</b>\n"
             f"🎯 Контроль {bot_control} {'✅' if player_result['control_success'] else '❌'} (+{1 if player_result['control_success'] else 0})\n"
-            f"💥 Атака {bot_attack} {'✅' if player_result['attack_success'] else '❌'} (+{1 if player_result['attack_success'] else 0})\n\n"
+            f"💥 Атака {bot_attack} {'✅' if player_result['attack_success'] else '❌'} (+{2 if player_result['attack_success'] and player_result['control_success'] else 1 if player_result['attack_success'] else 0})\n\n"
             f"<b>Уке Вы:</b>\n"
             f"🛡️ Защита {player_defense}\n"
             f"🛑 Защита контроля: {'✅' if player_result['defense_control_success'] else '❌'} (+{1 if player_result['defense_control_success'] else 0})\n"
             f"➡️ Контратака: {'✅' if player_result['counter_success'] else '❌'} (+{1 if player_result['counter_success'] else 0})\n"
-            f"🔥 Защита от атаки: {'✅' if player_result['defense_attack_success'] else '❌'} (+{1 if player_result['defense_attack_success'] else 0})\n\n"
+            f"🔥 Добивание: {'✅' if player_result['defense_control_success'] and player_result['defense_attack_success'] else '❌'} (+{2 if player_result['defense_control_success'] and player_result['defense_attack_success'] else 1 if player_result['defense_attack_success'] else 0})\n\n"
             f"<b>🥊 Счёт: Вы {context.user_data['player_score']} - Бот {context.user_data['bot_score']}</b>"
         )
         context.user_data["log"].append(log_message)
@@ -358,7 +368,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data["step"] <= 5:
             await query.message.reply_text(
                 f"<u>⚔️ Схватка {context.user_data['step']}</u>\n\n"
-                f"<b>👊 Атака:</b> Выберите контроль:",
+                f"🎯 Начните боевое действие!\n"
+                f"1. Выберите уровень контроля",
                 reply_markup=pvp_attack_keyboard("control"),
                 parse_mode="HTML"
             )
