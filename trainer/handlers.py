@@ -1,6 +1,7 @@
 import random
 import logging
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, ParseMode
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
+from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import (
     Application,
@@ -50,13 +51,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await update.message.reply_text(
             TEXTS["start_welcome"].format(username=telegram_username),
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(
             TEXTS["start_no_username"],
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=ForceReply(selective=True)
         )
 
@@ -83,14 +84,14 @@ async def handle_nick_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state.nickname = nick
         await update.message.reply_text(
             TEXTS["nick_set"].format(nick=nick),
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=get_start_keyboard()
         )
     else:
         state.nickname = "Вы"
         await update.message.reply_text(
             TEXTS["nick_default"],
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=get_start_keyboard()
         )
 
@@ -129,7 +130,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat_id,
                 message_id=message_id,
                 text="⏰ Время вышло!",
-                parse_mode="HTML",
+                parse_mode=ParseMode.HTML,
             )
             control, attack = state.fight_sequence[state.current_step]
             is_success, partial_success, correct_answer = check_move(control, attack, "Аге уке")
@@ -137,20 +138,20 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
                 state.current_step, control, attack, "Нет ответа", False, False, correct_answer
             )
             short_msg = await context.bot.send_message(
-                chat_id=chat_id, text=short_log, parse_mode="HTML"
+                chat_id=chat_id, text=short_log, parse_mode=ParseMode.HTML
             )
             detailed_log = generate_detailed_log(control, attack, "Нет ответа", False)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=detailed_log,
-                parse_mode="HTML",
+                parse_mode=ParseMode.HTML,
                 reply_to_message_id=short_msg.message_id
             )
             if state.current_step >= len(state.fight_sequence) - 1:
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=TEXTS["training_end"],
-                    parse_mode="HTML"
+                    parse_mode=ParseMode.HTML
                 )
                 final_stats = generate_final_stats(
                     state.correct_count,
@@ -161,7 +162,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=final_stats,
-                    parse_mode="HTML",
+                    parse_mode=ParseMode.HTML,
                     reply_markup=get_start_keyboard()
                 )
                 state.reset()
@@ -185,7 +186,7 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
                 remaining=remaining
             ),
             reply_markup=answer_keyboard(),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
     except BadRequest as e:
         logger.warning(f"Не удалось обновить сообщение таймера: {e}")
@@ -206,7 +207,7 @@ async def show_next_move(context, chat_id, mode, fight_sequence, current_step):
                 remaining=5
             ),
             reply_markup=answer_keyboard(),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
         state.last_message_id = message.message_id
         context.job_queue.run_repeating(
@@ -232,7 +233,7 @@ async def show_next_move(context, chat_id, mode, fight_sequence, current_step):
                 attack=attack
             ),
             reply_markup=answer_keyboard(send_hint=True),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
         state.last_message_id = message.message_id
 
@@ -261,7 +262,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state.nickname = telegram_username
         await query.message.reply_text(
             TEXTS["use_telegram_nick"].format(username=telegram_username),
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=get_start_keyboard()
         )
         try:
@@ -281,18 +282,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             TEXTS["training_fight_menu"],
             reply_markup=training_fight_keyboard(),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
     elif query.data == "training_rules":
         await query.edit_message_text(
             TEXTS["training_rules"],
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=training_rules_keyboard()
         )
     elif query.data == "training_memo":
         await query.edit_message_text(
             TEXTS["training_memo"],
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=training_memo_keyboard()
         )
     elif query.data in ["simple_fight", "timed_fight"]:
@@ -316,7 +317,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 attack=attack,
                 correct_answer=correct_answer
             )
-            await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
+            await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode=ParseMode.HTML)
             state.hint_count += 1
     elif query.data == "pvp_bot":
         logger.info("Переход в режим PvP: отображение меню")
@@ -324,12 +325,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             TEXTS["pvp_bot_menu"],
             reply_markup=pvp_bot_keyboard(),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
     elif query.data == "pvp_rules":
         await query.edit_message_text(
             TEXTS["pvp_rules"],
-            parse_mode="HTML",
+            parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Начать бой", callback_data="pvp_start")]])
         )
     elif query.data == "pvp_start":
@@ -342,7 +343,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             TEXTS["pvp_start"].format(step=state.step + 1),
             reply_markup=pvp_attack_keyboard("control"),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
     elif query.data.startswith("attack_control_"):
         control = query.data.split("_")[2]
@@ -352,7 +353,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 TEXTS["pvp_attack"].format(step=state.step + 1),
                 reply_markup=pvp_attack_keyboard("attack"),
-                parse_mode="HTML"
+                parse_mode=ParseMode.HTML
             )
         except BadRequest as e:
             logger.error(f"Ошибка Telegram API в attack_control_: {e}")
@@ -370,7 +371,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 TEXTS["pvp_defense"].format(step=state.step + 1, control=state.player_control, attack=state.player_attack),
                 reply_markup=answer_keyboard(),
-                parse_mode="HTML"
+                parse_mode=ParseMode.HTML
             )
             logger.info("Сообщение успешно обновлено")
         except BadRequest as e:
@@ -390,7 +391,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     defense=state.player_defense
                 ),
                 reply_markup=pvp_move_keyboard(),
-                parse_mode="HTML"
+                parse_mode=ParseMode.HTML
             )
         except BadRequest as e:
             logger.error(f"Ошибка Telegram API в выборе защиты: {e}")
@@ -422,7 +423,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state.bot_control, state.bot_attack, bot_defense,
             state.player_score, state.bot_score
         )
-        await query.message.reply_text(log, parse_mode="HTML")
+        await query.message.reply_text(log, parse_mode=ParseMode.HTML)
         try:
             await query.message.delete()
         except BadRequest as e:
@@ -437,7 +438,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     winner=winner
                 ),
                 reply_markup=get_start_keyboard(),
-                parse_mode="HTML"
+                parse_mode=ParseMode.HTML
             )
             state.reset()
         else:
@@ -449,7 +450,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(
                 TEXTS["pvp_start"].format(step=state.step + 1),
                 reply_markup=pvp_attack_keyboard("control"),
-                parse_mode="HTML"
+                parse_mode=ParseMode.HTML
             )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         if state.fight_sequence and state.current_step is not None and query.message.message_id == state.last_message_id:
@@ -459,22 +460,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chosen_defense = query.data
             is_success, partial_success, correct_answer = check_move(control, attack, chosen_defense)
             short_log = generate_short_log(state.current_step, control, attack, chosen_defense, is_success, partial_success, correct_answer)
-            short_msg = await query.message.reply_text(short_log, parse_mode="HTML")
+            short_msg = await query.message.reply_text(short_log, parse_mode=ParseMode.HTML)
             detailed_log = generate_detailed_log(control, attack, chosen_defense, is_success)
-            await query.message.reply_text(detailed_log, parse_mode="HTML", reply_to_message_id=short_msg.message_id)
+            await query.message.reply_text(detailed_log, parse_mode=ParseMode.HTML, reply_to_message_id=short_msg.message_id)
             if is_success:
                 state.correct_count += 1
             if control == DEFENSE_MOVES[chosen_defense]["control"]:
                 state.control_count += 1
             if state.current_step >= len(state.fight_sequence) - 1:
-                await query.message.reply_text(TEXTS["training_end"], parse_mode="HTML")
+                await query.message.reply_text(TEXTS["training_end"], parse_mode=ParseMode.HTML)
                 final_stats = generate_final_stats(
                     state.correct_count,
                     state.control_count,
                     state.hint_count,
                     len(MOVES)
                 )
-                await query.message.reply_text(final_stats, parse_mode="HTML", reply_markup=get_start_keyboard())
+                await query.message.reply_text(final_stats, parse_mode=ParseMode.HTML, reply_markup=get_start_keyboard())
                 state.reset()
             else:
                 state.current_step += 1
