@@ -134,8 +134,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 f"<code>⚔️ Схватка {step + 1} из {len(MOVES)}</code>\n\n"
                 f"🎯 Контроль: <b>{control}</b>\n"
-                f"💥 Атака: <b>{attack}</b>\n"
-                f"💡 Правильно: 🛡 {correct_answer}"
+                f"💥 Атака: <b>{attack}</b>\n\n"
+                f"💡 Правильно: 🛡 <b>{correct_answer}</b>"
             )
             await query.edit_message_text(text, reply_markup=answer_keyboard(send_hint=True), parse_mode="HTML")
             context.user_data["hint_count"] = context.user_data.get("hint_count", 0) + 1
@@ -188,20 +188,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
         context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
         await query.edit_message_text(
-            "Совершите атаку!\n1. Выберите уровень контроля",
-            reply_markup=pvp_attack_keyboard("control")
+            f"⚔️ Схватка 1\n\n🎯 Начните боевое действие!\n<b>1. Выберите уровень контроля</b>",
+            reply_markup=pvp_attack_keyboard("control"),
+            parse_mode="HTML"
         )
     elif query.data.startswith("attack_control_"):
         context.user_data["player_control"] = query.data.split("_")[2]
+        step = context.user_data["step"] + 1
         await query.edit_message_text(
-            "Завершите атаку!\n2. Выберите уровень атаки",
-            reply_markup=pvp_attack_keyboard("attack")
+            f"⚔️ Схватка {step}\n\n💥 Завершите боевое действие!\n<b>2. Выберите уровень атаки</b>",
+            reply_markup=pvp_attack_keyboard("attack"),
+            parse_mode="HTML"
         )
     elif query.data.startswith("attack_hit_"):
         context.user_data["player_attack"] = query.data.split("_")[2]
+        step = context.user_data["step"] + 1
         await query.edit_message_text(
-            f"Ваша атака: Контроль {context.user_data['player_control']}, Атака {context.user_data['player_attack']}\nВыберите защиту:",
-            reply_markup=answer_keyboard()
+            f"⚔️ Схватка {step}\n\n"
+            f"Ваша атака: <i>Контроль</i> <b>{context.user_data['player_control']}</b>, <i>Атака</i> <b>{context.user_data['player_attack']}</b>\n"
+            f"<b>🛡️ Выберите защиту:</b>",
+            reply_markup=answer_keyboard(),
+            parse_mode="HTML"
         )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"] and "pvp_mode" in context.user_data:
         context.user_data["player_defense"] = query.data
@@ -271,6 +278,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Бот</b> {'успех' if bot_dobivanie_success else 'неуспех'} (+{2 if bot_dobivanie_success else 0})\n"
             f"Счёт: <b>Вы</b> {context.user_data['player_score']} - <b>Бот</b> {context.user_data['bot_score']}"
         )
+        # Сначала отправляем лог схватки
         await query.message.reply_text(log, parse_mode="HTML")
         if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
             winner = "Вы" if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
@@ -282,9 +290,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["player_defense"] = None
             context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
             context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
+            # Затем редактируем сообщение для нового хода
             await query.edit_message_text(
-                "Совершите атаку!\n1. Выберите уровень контроля",
-                reply_markup=pvp_attack_keyboard("control")
+                f"⚔️ Схватка {step + 1}\n\n🎯 Начните боевое действие!\n<b>1. Выберите уровень контроля</b>",
+                reply_markup=pvp_attack_keyboard("control"),
+                parse_mode="HTML"
             )
     elif query.data in ["Аге уке", "Сото уке", "Учи уке", "Гедан барай"]:
         sequence = context.user_data.get("fight_sequence")
