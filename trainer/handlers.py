@@ -1,6 +1,6 @@
 from telegram.ext import ContextTypes
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
-from keyboards import menu_keyboard, training_mode_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
+from keyboards import menu_keyboard, training_fight_keyboard, training_rules_keyboard, training_memo_keyboard, answer_keyboard, pvp_bot_keyboard, pvp_attack_keyboard, pvp_move_keyboard
 from game_logic import generate_fight_sequence, check_move, generate_short_log, generate_detailed_log, generate_final_stats
 from data import MOVES, DEFENSE_MOVES
 import logging
@@ -174,14 +174,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "use_telegram_nick":
         telegram_username = update.effective_user.username or update.effective_user.first_name
         context.user_data["nickname"] = telegram_username
-        await query.message.reply_text(  # Используем reply_text вместо edit
+        await query.message.reply_text(
             f"Ник установлен: <b>{telegram_username}</b>\n"
             "Готовы сразиться с <b>🥸 Bot Васей</b>?",
             parse_mode="HTML",
             reply_markup=get_start_keyboard()
         )
         try:
-            await query.message.delete()  # Удаляем сообщение с кнопками
+            await query.message.delete()
         except BadRequest as e:
             logger.warning(f"Не удалось удалить сообщение: {e}")
     elif query.data == "choose_own_nick":
@@ -190,11 +190,65 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ForceReply(selective=True)
         )
         try:
-            await query.message.delete()  # Удаляем сообщение с кнопками
+            await query.message.delete()
         except BadRequest as e:
             logger.warning(f"Не удалось удалить сообщение: {e}")
     elif query.data == "training_fight":
-        await query.edit_message_text("Выберите режим боя:", reply_markup=training_mode_keyboard())
+        await query.edit_message_text(
+            "🥊 Учебный бой: выберите действие:",
+            reply_markup=training_fight_keyboard(),
+            parse_mode="HTML"
+        )
+    elif query.data == "training_rules":
+        await query.edit_message_text(
+            "<b>ПРАВИЛА ИГРЫ</b>\n"
+            "➖\n"
+            "Добро пожаловать в КАРАТЭ тотализатор! Здесь вы сражаетесь с виртуальным противником <b>🥸 Bot Васей</b>. Ваша задача — правильно блокировать его атаки и контратаковать.\n\n"
+            "<b>Как устроен поединок:</b>\n"
+            "1. <i>Шаг боя:</i> Противник выбирает 🎯 <b>Контроль</b> (где он вас держит) и 💥 <b>Атаку</b> (куда бьёт).\n"
+            "2. <i>Ваш ход:</i> Вы выбираете один из блоков: 🛡️ <b>Аге уке</b>, <b>Учи уке</b>, <b>Сото уке</b> или <b>Гедан барай</b>.\n"
+            "3. <i>Результат:</i>\n"
+            "   - ✅ <b>УСПЕХ:</b> если блок отражает контроль и атаку.\n"
+            "   - ⚠️ <b>ЧАСТИЧНЫЙ УСПЕХ:</b> если контроль не отбит, но атака заблокирована или наоборот.\n"
+            "   - ❌ <b>ПОРАЖЕНИЕ:</b> если контроль или атака достигли цели.\n"
+            "4. <i>Лог боя:</i> После хода — краткий и подробный результат.\n\n"
+            "<b>Режимы:</b>\n"
+            "- <i>Простой бой:</i> Без таймера, с подсказками.\n"
+            "- <i>Бой на время:</i> 5 секунд на ход.\n\n"
+            "<b>Цель:</b>\n"
+            "Пройти 9 шагов, набрав максимум очков.",
+            parse_mode="HTML",
+            reply_markup=training_rules_keyboard()
+        )
+    elif query.data == "training_memo":
+        await query.edit_message_text(
+            "<b>🧠 ПАМЯТКА</b>\n"
+            "➖\n"
+            "👊🏻 <i>Зоны контроля и атаки:</i>\n"
+            "• <b>СС</b> — Чудан (солнечное сплетение)\n"
+            "• <b>ТР</b> — Чудан (трахея)\n"
+            "• <b>ДЗ</b> — Дзедан (голова)\n"
+            "• <b>ГДН</b> — Годан (ниже пояса)\n\n"
+            "🛡️ <i>Блоки:</i>\n"
+            "▫️ <b>Аге уке</b>\n"
+            "   • <i>Защита:</i> <b>СС</b>\n"
+            "   • <i>Контратака:</i> <b>ДЗ</b> / <b>ТР</b>\n"
+            "   • <i>Добивание:</i> <b>ДЗ</b>\n"
+            "▫️ <b>Учи уке</b>\n"
+            "   • <i>Защита:</i> <b>СС</b>\n"
+            "   • <i>Контратака:</i> <b>ДЗ</b> / <b>ТР</b>\n"
+            "   • <i>Добивание:</i> <b>ДЗ</b> / <b>ТР</b> / <b>СС</b>\n"
+            "▫️ <b>Сото уке</b>\n"
+            "   • <i>Защита:</i> <b>ТР</b>\n"
+            "   • <i>Контратака:</i> <b>ДЗ</b> / <b>СС</b>\n"
+            "   • <i>Добивание:</i> <b>ДЗ</b> / <b>ТР</b> / <b>СС</b>\n"
+            "▫️ <b>Гедан барай</b>\n"
+            "   • <i>Защита:</i> <b>ДЗ</b>\n"
+            "   • <i>Контратака:</i> <b>ТР</b> / <b>СС</b>\n"
+            "   • <i>Добивание:</i> <b>ТР</b> / <b>СС</b> / <b>ГДН</b>",
+            parse_mode="HTML",
+            reply_markup=training_memo_keyboard()
+        )
     elif query.data in ["simple_fight", "timed_fight"]:
         context.user_data["fight_sequence"] = generate_fight_sequence()
         context.user_data["current_step"] = 0
@@ -244,20 +298,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Произошла ошибка. Попробуйте снова.", reply_markup=get_start_keyboard())
     elif query.data == "pvp_rules":
         await query.edit_message_text(
-            "<b>ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА</b>\n➖\n"
-            "Вы сражаетесь с <b>Bot Васей</b> за очки.\n\n"
-            "<u>Схватка:</u>\n"
-            "- Выбираете <b>Контроль</b> и <b>Атаку</b> (СС, ТР, ДЗ).\n"
-            "- Выбираете <b>Защиту</b> (Аге уке, Сото уке, Учи уке, Гедан барай).\n\n"
-            "<u>Очки:</u>\n"
-            "- Контроль: +1.\n"
-            "- Атака: +2 (если контроль успешен) или +1.\n"
-            "- Контратака: +1 (если защита от контроля).\n"
-            "- Добивание: +2 (если контратака и защита от атаки).\n\n"
-            "<u>Победа:</u>\n"
-            "- Разрыв в 8 очков или 5 минут.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Начать бой", callback_data="pvp_start")]]),
-            parse_mode="HTML"
+            "<b>ПРАВИЛА СПОРТИВНОГО ПОЕДИНКА</b>\n"
+            "➖\n"
+            "Вы сражаетесь с <b>🥸 Bot Васей</b> на счёт.\n\n"
+            "<b>Схватка:</b>\n"
+            "- Выбираете уровни 🎯 <u>Контроля</u> и 💥 <u>Атаки</u> (<b>СС</b>, <b>ТР</b>, <b>ДЗ</b>).\n"
+            "- Выбираете 🛡️ <u>Защиту</u> (<b>Аге уке</b>, <b>Сото уке</b>, <b>Учи уке</b>, <b>Гедан барай</b>).\n\n"
+            "<b>Начисление баллов:</b>\n"
+            "<u>Тори:</u>\n"
+            "- 🎯 <u>Контроль:</u> +1.\n"
+            "- 💥 <u>Атака:</u> +2 (если Контроль успешен ✅) или +1.\n"
+            "<u>Уке:</u>\n"
+            "- ➡️ <u>Контратака:</u> +1 (если защита от контроля удалась ✅).\n"
+            "- 🔥 <u>Добивание:</u> +2 (если защита от Контроля и Защита от атаки успешны ✅).\n"
+            "- 🛑 <u>Защита от атаки:</u> +1 (если защита от Контроля не удалась ❌, но Защита от атаки успешна ✅).\n\n"
+            "<b>🏆 Победа:</b>\n"
+            "- Победа за тем, кто за 5 схваток наберёт большее количество очков.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Начать бой", callback_data="pvp_start")]])
         )
     elif query.data == "pvp_start":
         context.user_data["pvp_mode"] = "sport"
@@ -379,7 +437,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.delete()
         except BadRequest as e:
             logger.warning(f"Не удалось удалить сообщение: {e}")
-        if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
+        if step >= 5:  # Условие окончания боя: 5 схваток
             winner = player_name if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
             winner_text = f"<b>🏆 {winner}</b>" if winner != "Ничья" else "<b>🏆 Ничья</b>"
             await query.message.reply_text(
