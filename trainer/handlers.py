@@ -35,7 +35,6 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def update_timer(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     if not job.data.get("active", True):
-        job.schedule_removal()
         return
     chat_id = job.data["chat_id"]
     message_id = job.data["message_id"]
@@ -51,24 +50,37 @@ async def update_timer(context: ContextTypes.DEFAULT_TYPE):
             f"Осталось: {remaining} сек"
         )
         if remaining > 0:
-            await context.bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML"
-            )
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id, text=text, reply_markup=answer_keyboard(), parse_mode="HTML"
+                )
+            except BadRequest as e:
+                if "Message to edit not found" in str(e):
+                    logger.info(f"Сообщение {message_id} уже удалено, пропускаем редактирование")
+                    job.data["active"] = False
+                    return
+                raise
         else:
-            await context.bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML"
-            )
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id, text="Время вышло! Вы проиграли.", parse_mode="HTML"
+                )
+            except BadRequest as e:
+                if "Message to edit not found" in str(e):
+                    logger.info(f"Сообщение {message_id} уже удалено, пропускаем редактирование")
+                else:
+                    raise
             job.data["timer_ended"] = True
             job.data["active"] = False
-            job.schedule_removal()
-    except BadRequest as e:
-        logger.info(f"Сообщение не найдено для редактирования: {e}")
-        job.data["active"] = False
-        job.schedule_removal()
     except Exception as e:
         logger.error(f"Ошибка в update_timer: {e}", exc_info=True)
         job.data["active"] = False
-        job.schedule_removal()
+    finally:
+        if not job.data.get("active", True):
+            try:
+                job.schedule_removal()
+            except Exception as e:
+                logger.warning(f"Не удалось удалить задачу в update_timer: {e}")
 
 async def show_next_move(context, chat_id, mode, sequence, step):
     control, attack = sequence[step]
@@ -280,6 +292,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         # Сначала отправляем лог схватки
         await query.message.reply_text(log, parse_mode="HTML")
+        # Удаляем текущее сообщение
+        try:
+            await query.message.delete()
+        except BadRequest as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
         if abs(context.user_data["player_score"] - context.user_data["bot_score"]) >= 8 or step >= 5:
             winner = "Вы" if context.user_data["player_score"] > context.user_data["bot_score"] else "Бот" if context.user_data["bot_score"] > context.user_data["player_score"] else "Ничья"
             await query.message.reply_text(f"Бой завершён! Победитель: {winner}", reply_markup=get_start_keyboard())
@@ -290,8 +307,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["player_defense"] = None
             context.user_data["bot_control"] = random.choice(["СС", "ТР", "ДЗ"])
             context.user_data["bot_attack"] = random.choice(["СС", "ТР", "ДЗ"])
-            # Затем редактируем сообщение для нового хода
-            await query.edit_message_text(
+            # Отправляем новое сообщение для следующего хода
+            await query.message.reply_text(
                 f"⚔️ Схватка {step + 1}\n\n🎯 Начните боевое действие!\n<b>1. Выберите уровень контроля</b>",
                 reply_markup=pvp_attack_keyboard("control"),
                 parse_mode="HTML"
