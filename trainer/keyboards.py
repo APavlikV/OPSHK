@@ -49,10 +49,15 @@ def pvp_bot_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 def pvp_attack_keyboard(mode):
-    keyboard = [
-        [InlineKeyboardButton("ДЗ", callback_data="attack_hit_ДЗ")],
-        [InlineKeyboardButton("СС", callback_data="attack_hit_СС"), InlineKeyboardButton("ТР", callback_data="attack_hit_ТР")]
-    ]
+    if mode == "control":
+        keyboard = [
+            [InlineKeyboardButton("СС", callback_data="attack_control_СС"), InlineKeyboardButton("ТР", callback_data="attack_control_ТР")]
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton("ДЗ", callback_data="attack_hit_ДЗ")],
+            [InlineKeyboardButton("СС", callback_data="attack_hit_СС"), InlineKeyboardButton("ТР", callback_data="attack_hit_ТР")]
+        ]
     return InlineKeyboardMarkup(keyboard)
 
 def pvp_move_keyboard():
