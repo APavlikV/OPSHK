@@ -158,7 +158,7 @@ async def button(update: Update, context: CallbackContext):
         )
     elif data == "training_rules":
         await query.message.reply_text(
-            TEXTS.get("training_rules", "📜 Правила тренировок: защищайтесь и контратакуйте, выбирая правильные блоки!"),
+            TEXTS["training_rules"],
             parse_mode="HTML"
         )
     elif data == "pvp_rules":
