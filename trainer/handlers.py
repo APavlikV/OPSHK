@@ -2,8 +2,8 @@ import random
 import logging
 from telegram import Update
 from telegram.ext import CallbackContext
-from .game_logic import check_move, generate_detailed_log
-from .keyboards import pvp_attack_keyboard, end_fight_keyboard
+from trainer.game_logic import check_move, generate_detailed_log
+from trainer.keyboards import pvp_attack_keyboard, end_fight_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ async def start_simple_fight(update: Update, context: CallbackContext):
     await update.callback_query.message.reply_text(
         f"⚔️ {nickname}, начинаем бой!", parse_mode="HTML"
     )
-    # Запуск первого хода (допустим, есть функция show_move)
     await show_move(update, context)
 
 async def simple_fight_defense(update: Update, context: CallbackContext):
