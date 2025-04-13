@@ -5,7 +5,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 from telegram.request import HTTPXRequest
-from handlers import start, game, button, setnick, handle_nick_reply
+from trainer.handlers import start, game, button, setnick, handle_nick_reply  # Исправлено
 
 # --- Глобальный логгер ---
 logging.basicConfig(
