@@ -129,7 +129,10 @@ async def button(update: Update, context: CallbackContext):
                     InlineKeyboardButton("Простой бой", callback_data="simple_fight"),
                     InlineKeyboardButton("Бой на время", callback_data="timed_fight")
                 ],
-                [InlineKeyboardButton("Памятка", callback_data="training_memo")]
+                [
+                    InlineKeyboardButton("Памятка", callback_data="training_memo"),
+                    InlineKeyboardButton("Правила", callback_data="training_rules")
+                ]
             ])
         )
     elif data == "pvp_menu":
@@ -153,6 +156,11 @@ async def button(update: Update, context: CallbackContext):
             TEXTS["training_memo"],
             parse_mode="HTML"
         )
+    elif data == "training_rules":
+        await query.message.reply_text(
+            TEXTS.get("training_rules", "📜 Правила тренировок: защищайтесь и контратакуйте, выбирая правильные блоки!"),
+            parse_mode="HTML"
+        )
     elif data == "pvp_rules":
         await query.message.reply_text(
             TEXTS["pvp_rules"],
@@ -160,6 +168,26 @@ async def button(update: Update, context: CallbackContext):
         )
     elif data == "simple_fight":
         await start_simple_fight(update, context)
+    elif data == "timed_fight":
+        await query.message.reply_text(
+            "⏱ Бой на время в разработке!",
+            parse_mode="HTML"
+        )
+    elif data == "back_to_training":
+        await query.message.reply_text(
+            TEXTS["training_fight_menu"],
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Простой бой", callback_data="simple_fight"),
+                    InlineKeyboardButton("Бой на время", callback_data="timed_fight")
+                ],
+                [
+                    InlineKeyboardButton("Памятка", callback_data="training_memo"),
+                    InlineKeyboardButton("Правила", callback_data="training_rules")
+                ]
+            ])
+        )
     elif data == "pvp_fight":
         state.mode = "pvp"
         state.step = 1
@@ -213,17 +241,21 @@ async def show_move(update: Update, context: CallbackContext):
             InlineKeyboardButton("Гедан барай", callback_data="defense_Гедан барай")
         ]
     ])
-    await update.callback_query.message.reply_text(
+    message = await update.callback_query.message.reply_text(
         reply_text,
         parse_mode="HTML",
         reply_markup=reply_markup
     )
+    state.last_message_id = message.message_id
+    context.user_data["state"] = state
 
 async def simple_fight_defense(update: Update, context: CallbackContext):
     query = update.callback_query
     state = context.user_data.get("state", GameState())
     chosen_defense = query.data.replace("defense_", "")
     control, attack = state.fight_sequence[state.current_step]
+    
+    logger.debug(f"simple_fight_defense: control={control}, attack={attack}, chosen_defense={chosen_defense}")
     
     is_success, partial_success, correct_defenses = check_move(control, attack, chosen_defense)
     
@@ -235,6 +267,22 @@ async def simple_fight_defense(update: Update, context: CallbackContext):
     
     nickname = state.nickname or "Боец"
     log = generate_detailed_log(control, attack, chosen_defense, is_success, nickname)
+    
+    # Обновляем сообщение с заданием
+    task_text = TEXTS["training_move_simple"].format(
+        step=state.current_step + 1,
+        total=len(state.fight_sequence),
+        control=control,
+        attack=attack
+    )
+    result_text = f"\nЗащита и контратака: {chosen_defense} {'🟢 УСПЕХ' if is_success else '🔴 ПРОВАЛ'}"
+    await query.message.edit_text(
+        task_text + result_text,
+        parse_mode="HTML",
+        reply_markup=None
+    )
+    
+    # Отправляем лог схватки
     await query.message.reply_text(
         log,
         parse_mode="HTML"
