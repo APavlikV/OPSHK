@@ -1,32 +1,31 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from trainer.data import CONTROLS, ATTACKS
 
 def pvp_attack_keyboard(step, control=None):
     if step == "control":
-        return InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("ДЗ", callback_data="attack_control_ДЗ"),
-                InlineKeyboardButton("СС", callback_data="attack_control_СС"),
-                InlineKeyboardButton("ТР", callback_data="attack_control_ТР")
-            ]
-        ])
-    elif step == "attack":
-        moves = ["СС", "ТР", "ДЗ"]
-        if control == "ДЗ":
-            moves = ["СС", "ТР", "ГДН"]
-        elif control == "ТР":
-            moves = ["ДЗ", "СС", "ТР", "ГДН"]
-        elif control == "СС":
-            moves = ["СС", "ТР", "ДЗ"]
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton(move, callback_data=f"attack_hit_{move}") for move in moves]
-        ])
-    return InlineKeyboardMarkup([])
+        buttons = [
+            [InlineKeyboardButton(text, callback_data=f"attack_control_{text}")]
+            for text in CONTROLS
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text, callback_data=f"attack_{text}")]
+            for text in ATTACKS
+            if text != control
+        ]
+    return InlineKeyboardMarkup(buttons)
 
 def end_fight_keyboard():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Продолжить тренировку", callback_data="simple_fight"),
-            InlineKeyboardButton("Бой на время", callback_data="timed_fight"),
+            InlineKeyboardButton("Простой бой", callback_data="simple_fight"),
+            InlineKeyboardButton("Бой на время", callback_data="timed_fight")
         ],
-        [InlineKeyboardButton("Прошлая статистика", callback_data="last_stats")]
+        [
+            InlineKeyboardButton("Правила", callback_data="training_rules"),
+            InlineKeyboardButton("Памятка", callback_data="training_memo")
+        ],
+        [
+            InlineKeyboardButton("Назад", callback_data="back_to_training")
+        ]
     ])
