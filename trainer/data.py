@@ -6,28 +6,27 @@ MOVES = [
 
 DEFENSE_MOVES = {
     "Аге уке": {
-        "control": ["СС"],
-        "attack_defense": ["СС", "ТР"],
-        "counter": ["ДЗ"]
+        "control_defense": ["СС"],
+        "counterattack": ["СС", "ТР"],
+        "attack_defense": ["ДЗ"]
     },
     "Сото уке": {
-        "control": ["СС", "ТР"],
-        "attack_defense": ["СС", "ДЗ"],
-        "counter": ["СС", "ТР", "ДЗ"]
+        "control_defense": ["СС", "ТР"],
+        "counterattack": ["СС", "ДЗ"],
+        "attack_defense": ["СС", "ТР", "ДЗ"]
     },
     "Учи уке": {
-        "control": ["СС"],
-        "attack_defense": ["ТР", "ДЗ"],
-        "counter": ["СС", "ТР", "ДЗ"]
+        "control_defense": ["СС"],
+        "counterattack": ["ТР", "ДЗ"],
+        "attack_defense": ["СС", "ТР", "ДЗ"]
     },
     "Гедан барай": {
-        "control": ["ТР", "ДЗ"],
-        "attack_defense": ["СС", "ТР", "ГДН"],
-        "counter": ["СС", "ТР", "ГДН"]
+        "control_defense": ["ТР", "ДЗ"],
+        "counterattack": ["СС", "ТР", "ГДН"],
+        "attack_defense": ["СС", "ТР", "ГДН"]
     }
 }
 
-# Определяем списки для PvP-клавиатуры
 CONTROLS = sorted(set(control for control, _ in MOVES))
 ATTACKS = sorted(set(attack for _, attack in MOVES))
 
