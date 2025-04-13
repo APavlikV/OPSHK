@@ -26,6 +26,6 @@ def end_fight_keyboard():
             InlineKeyboardButton("Памятка", callback_data="training_memo")
         ],
         [
-            InlineKeyboardButton("Назад", callback_data="back_to_training")
+            InlineKeyboardButton("Назад", callback_data="back_to_menu")
         ]
     ])
