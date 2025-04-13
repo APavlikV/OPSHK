@@ -1,9 +1,59 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CallbackContext
-from trainer.data import MOVES, DEFENSE_MOVES
+from telegram.ext import CallbackContext, ConversationHandler
+from trainer.data import MOVES, DEFENSE_MOVES, CONTROLS, ATTACKS
 from trainer.game_logic import check_move, generate_detailed_log
 from trainer.state import GameState
 import random
+
+# Состояния для ConversationHandler
+NICKNAME = 0
+
+async def start(update: Update, context: CallbackContext):
+    state = GameState()
+    state.nickname = update.effective_user.first_name
+    context.user_data["state"] = state
+    await update.message.reply_text(
+        f"👊 Привет, {state.nickname}! Я Тори Бот Вася, твой спарринг-партнёр по каратэ! 🥋\n"
+        "Готов потренироваться? Выбирай режим:\n"
+        "/game — Простой бой (10 схваток)\n"
+        "/setnick — Сменить ник\n"
+        "Погнали?"
+    )
+
+async def setnick(update: Update, context: CallbackContext):
+    await update.message.reply_text("💡 Напиши свой новый ник:")
+    return NICKNAME
+
+async def handle_nick_reply(update: Update, context: CallbackContext):
+    state = context.user_data.get("state", GameState())
+    state.nickname = update.message.text.strip()
+    context.user_data["state"] = state
+    await update.message.reply_text(f"✅ Ник изменён на {state.nickname}! Готов к бою? Напиши /game")
+    return ConversationHandler.END
+
+async def handle_first_message(update: Update, context: CallbackContext):
+    state = GameState()
+    state.nickname = update.effective_user.first_name
+    context.user_data["state"] = state
+    await update.message.reply_text(
+        f"👊 Привет, {state.nickname}! Я Тори Бот Вася, твой спарринг-партнёр по каратэ! 🥋\n"
+        "Готов потренироваться? Выбирай режим:\n"
+        "/game — Простой бой (10 схваток)\n"
+        "/setnick — Сменить ник\n"
+        "Погнали?"
+    )
+
+async def game(update: Update, context: CallbackContext):
+    state = context.user_data.get("state", GameState())
+    if not state.nickname:
+        state.nickname = update.effective_user.first_name
+    await start_fight(update, context)
+
+async def button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    if query.data.startswith("defense_"):
+        await simple_fight_defense(update, context)
+    await query.answer()
 
 async def start_fight(update: Update, context: CallbackContext):
     state = GameState()
