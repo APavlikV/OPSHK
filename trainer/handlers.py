@@ -33,11 +33,12 @@ async def start(update: Update, context: CallbackContext):
         reply_text = TEXTS["start_no_username"]
         reply_markup = None
         context.user_data["state"].awaiting_nick = True
-    await update.message.reply_text(
+    message = await update.message.reply_text(
         reply_text,
         parse_mode="HTML",
         reply_markup=reply_markup
     )
+    context.user_data["state"].last_message_id = message.message_id
 
 async def handle_first_message(update: Update, context: CallbackContext):
     state = context.user_data.get("state", GameState())
@@ -76,7 +77,7 @@ async def handle_nick_reply(update: Update, context: CallbackContext):
     state.nickname = nick or "Вы"
     state.awaiting_nick = False
     context.user_data["state"] = state
-    reply_text = TEXTS["nick_set"].format(nick=state.nickname)
+    reply_text = TEXTS["nick_set"].format(nick=state.nickname) + "\nГотовы к сражениям? Выберите, что Вы хотите:"
     await update.message.reply_text(
         reply_text,
         parse_mode="HTML",
@@ -84,16 +85,20 @@ async def handle_nick_reply(update: Update, context: CallbackContext):
     )
 
 async def game(update: Update, context: CallbackContext):
-    await update.message.reply_text(
-        TEXTS["game_menu"],
+    state = context.user_data.get("state", GameState())
+    reply_text = TEXTS["nick_set"].format(nick=state.nickname or "Боец") + "\nГотовы к сражениям? Выберите, что Вы хотите:"
+    message = await update.message.reply_text(
+        reply_text,
         parse_mode="HTML",
         reply_markup=game_menu_keyboard()
     )
+    state.last_message_id = message.message_id
+    context.user_data["state"] = state
 
 def game_menu_keyboard():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Тренировка", callback_data="training_menu"),
+            InlineKeyboardButton("Потренироваться", callback_data="training_menu"),
             InlineKeyboardButton("Схватка с Ботом", callback_data="pvp_menu"),
             InlineKeyboardButton("PvP Арена", callback_data="pvp_arena")
         ]
@@ -107,33 +112,30 @@ async def button(update: Update, context: CallbackContext):
     if data.startswith("use_nick_"):
         nickname = data.replace("use_nick_", "")
         state.nickname = nickname
-        context.user_data["state"] = state
-        await query.message.reply_text(
-            TEXTS["use_telegram_nick"].format(username=nickname),
+        reply_text = TEXTS["nick_set"].format(nick=nickname) + "\nГотовы к сражениям? Выберите, что Вы хотите:"
+        await query.message.edit_text(
+            reply_text,
             parse_mode="HTML",
             reply_markup=game_menu_keyboard()
         )
+        state.last_message_id = query.message.message_id
     elif data == "choose_nick":
         state.awaiting_nick = True
-        context.user_data["state"] = state
-        await query.message.reply_text(
+        await query.message.edit_text(
             TEXTS["choose_own_nick"],
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=None
         )
     elif data == "training_menu":
-        await query.message.reply_text(
-            TEXTS["training_fight_menu"],
+        reply_text = "🥊 Учебный бой: выберите действие:"
+        await query.message.edit_text(
+            reply_text,
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("Простой бой", callback_data="simple_fight"),
-                    InlineKeyboardButton("Бой на время", callback_data="timed_fight")
-                ],
-                [InlineKeyboardButton("Памятка", callback_data="training_memo")]
-            ])
+            reply_markup=training_menu_keyboard()
         )
+        state.last_message_id = query.message.message_id
     elif data == "pvp_menu":
-        await query.message.reply_text(
+        await query.message.edit_text(
             TEXTS["pvp_bot_menu"],
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
@@ -143,53 +145,133 @@ async def button(update: Update, context: CallbackContext):
                 ]
             ])
         )
+        state.last_message_id = query.message.message_id
     elif data == "pvp_arena":
-        await query.message.reply_text(
+        await query.message.edit_text(
             "🏟 PvP Арена в разработке! Скоро сможете сражаться с другими игроками!",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Назад", callback_data="back_to_menu")]
+            ])
         )
+        state.last_message_id = query.message.message_id
     elif data == "training_memo":
-        await query.message.reply_text(
+        await query.message.edit_text(
             TEXTS["training_memo"],
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=training_menu_keyboard(exclude="training_memo")
         )
+        state.last_message_id = query.message.message_id
+    elif data == "training_rules":
+        await query.message.edit_text(
+            TEXTS["training_rules"],
+            parse_mode="HTML",
+            reply_markup=training_menu_keyboard(exclude="training_rules")
+        )
+        state.last_message_id = query.message.message_id
     elif data == "pvp_rules":
-        await query.message.reply_text(
+        await query.message.edit_text(
             TEXTS["pvp_rules"],
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Начать бой", callback_data="pvp_fight"),
+                    InlineKeyboardButton("Назад", callback_data="pvp_menu")
+                ]
+            ])
         )
+        state.last_message_id = query.message.message_id
     elif data == "simple_fight":
         await start_simple_fight(update, context)
+    elif data == "timed_fight":
+        await query.message.edit_text(
+            "⏱ Бой на время в разработке!",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Назад", callback_data="training_menu")]
+            ])
+        )
+        state.last_message_id = query.message.message_id
+    elif data == "back_to_training":
+        await query.message.edit_text(
+            "🥊 Учебный бой: выберите действие:",
+            parse_mode="HTML",
+            reply_markup=training_menu_keyboard()
+        )
+        state.last_message_id = query.message.message_id
+    elif data == "back_to_menu":
+        reply_text = TEXTS["nick_set"].format(nick=state.nickname or "Боец") + "\nГотовы к сражениям? Выберите, что Вы хотите:"
+        await query.message.edit_text(
+            reply_text,
+            parse_mode="HTML",
+            reply_markup=game_menu_keyboard()
+        )
+        state.last_message_id = query.message.message_id
     elif data == "pvp_fight":
         state.mode = "pvp"
         state.step = 1
-        context.user_data["state"] = state
-        await query.message.reply_text(
+        await query.message.edit_text(
             TEXTS["pvp_start"].format(step=state.step),
             parse_mode="HTML",
             reply_markup=pvp_attack_keyboard("control")
         )
+        state.last_message_id = query.message.message_id
     elif data.startswith("defense_"):
         await simple_fight_defense(update, context)
     elif data.startswith("attack_"):
         await pvp_fight_attack(update, context)
     elif data == "last_stats":
         await last_stats(update, context)
+    elif data == "hint":
+        state.hint_count += 1
+        control, attack = state.fight_sequence[state.current_step]
+        correct_defenses = [d for d, v in DEFENSE_MOVES.items() if control in v.get("control", []) and attack in v.get("attack", [])]
+        hint_text = f"💡 Подсказка: правильная защита — {', '.join(correct_defenses) if correct_defenses else 'нет подходящей защиты'}"
+        await query.message.reply_text(
+            hint_text,
+            parse_mode="HTML"
+        )
+    context.user_data["state"] = state
+
+def training_menu_keyboard(exclude=None):
+    buttons = [
+        [
+            InlineKeyboardButton("Простой бой", callback_data="simple_fight"),
+            InlineKeyboardButton("Бой на время", callback_data="timed_fight")
+        ],
+        [
+            InlineKeyboardButton("Правила", callback_data="training_rules"),
+            InlineKeyboardButton("Памятка", callback_data="training_memo")
+        ],
+        [
+            InlineKeyboardButton("Назад", callback_data="back_to_menu")
+        ]
+    ]
+    if exclude == "training_rules":
+        buttons[1] = [InlineKeyboardButton("Памятка", callback_data="training_memo")]
+    elif exclude == "training_memo":
+        buttons[1] = [InlineKeyboardButton("Правила", callback_data="training_rules")]
+    return InlineKeyboardMarkup(buttons)
 
 async def start_simple_fight(update: Update, context: CallbackContext):
+    query = update.callback_query
     state = context.user_data.get("state", GameState())
     state.mode = "simple"
     state.fight_sequence = random.sample(MOVES, 10)
     state.current_step = 0
     state.correct_count = 0
     state.control_count = 0
+    state.missed_attacks = 0
     state.hint_count = 0
     context.user_data["state"] = state
     nickname = state.nickname or "Боец"
-    await update.callback_query.message.reply_text(
-        f"⚔️ {nickname}, начинаем бой!",
-        parse_mode="HTML"
+    await query.message.edit_text(
+        f"⚔️ <b>{nickname}</b>, начинаем бой! ⚔️",
+        parse_mode="HTML",
+        reply_markup=None
     )
+    state.last_message_id = query.message.message_id
+    context.user_data["state"] = state
     await show_move(update, context)
 
 async def show_move(update: Update, context: CallbackContext):
@@ -197,33 +279,39 @@ async def show_move(update: Update, context: CallbackContext):
     if state.current_step >= len(state.fight_sequence):
         return
     control, attack = state.fight_sequence[state.current_step]
-    reply_text = TEXTS["training_move_simple"].format(
-        step=state.current_step + 1,
-        total=len(state.fight_sequence),
-        control=control,
-        attack=attack
+    reply_text = (
+        f"<u>⚔️ Схватка {state.current_step + 1} из 10</u>\n\n"
+        f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+        f"💥 <i>Атака</i>: <b>{attack}</b>"
     )
     reply_markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("Аге уке", callback_data="defense_Аге уке"),
-            InlineKeyboardButton("Учи уке", callback_data="defense_Учи уке")
+            InlineKeyboardButton("Сото уке", callback_data="defense_Сото уке")
         ],
         [
-            InlineKeyboardButton("Сото уке", callback_data="defense_Сото уке"),
+            InlineKeyboardButton("Учи уке", callback_data="defense_Учи уке"),
             InlineKeyboardButton("Гедан барай", callback_data="defense_Гедан барай")
+        ],
+        [
+            InlineKeyboardButton("💡 Подсказка", callback_data="hint")
         ]
     ])
-    await update.callback_query.message.reply_text(
+    message = await update.callback_query.message.reply_text(
         reply_text,
         parse_mode="HTML",
         reply_markup=reply_markup
     )
+    state.last_fight_message_id = message.message_id
+    context.user_data["state"] = state
 
 async def simple_fight_defense(update: Update, context: CallbackContext):
     query = update.callback_query
     state = context.user_data.get("state", GameState())
     chosen_defense = query.data.replace("defense_", "")
     control, attack = state.fight_sequence[state.current_step]
+    
+    logger.debug(f"simple_fight_defense: control={control}, attack={attack}, chosen_defense={chosen_defense}")
     
     is_success, partial_success, correct_defenses = check_move(control, attack, chosen_defense)
     
@@ -232,9 +320,31 @@ async def simple_fight_defense(update: Update, context: CallbackContext):
         state.control_count += 1
     elif control in DEFENSE_MOVES.get(chosen_defense, {}).get("control", []):
         state.control_count += 1
+    else:
+        state.missed_attacks += 1
     
     nickname = state.nickname or "Боец"
     log = generate_detailed_log(control, attack, chosen_defense, is_success, nickname)
+    
+    # Перезаписываем сообщение с заданием
+    task_text = (
+        f"<u>⚔️ Схватка {state.current_step + 1} из 10</u>\n\n"
+        f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+        f"💥 <i>Атака</i>: <b>{attack}</b>\n"
+        f"🛡️ <i>Ваша защита</i>: <b>{chosen_defense}</b>\n\n"
+    )
+    result_text = "✅ <b>УСПЕХ</b>" if is_success else (
+        f"❌ <b>ПОРАЖЕНИЕ</b>\n<i>Правильно</i>: <b>{', '.join(correct_defenses) if correct_defenses else 'нет защиты'}</b>"
+    )
+    await context.bot.edit_message_text(
+        text=task_text + result_text,
+        chat_id=query.message.chat_id,
+        message_id=state.last_fight_message_id,
+        parse_mode="HTML",
+        reply_markup=None
+    )
+    
+    # Отправляем лог схватки
     await query.message.reply_text(
         log,
         parse_mode="HTML"
@@ -242,23 +352,40 @@ async def simple_fight_defense(update: Update, context: CallbackContext):
     
     state.current_step += 1
     context.user_data["state"] = state
+    
     if state.current_step >= 10:
-        state.last_fight_stats = {
-            "correct_count": state.correct_count,
-            "control_count": state.control_count,
-            "hint_count": state.hint_count
-        }
+        # Бой завершён
+        await query.message.reply_text(
+            "🏁 Бой завершён!",
+            parse_mode="HTML"
+        )
+        # Статистика
         stats_message = (
-            f"📊 Статистика боя для {nickname}:\n"
-            f"✅ Чистых побед: {state.correct_count} из 10\n"
-            f"🎯 Контролей отбито: {state.control_count} из 10\n"
-            f"💡 Подсказок использовано: {state.hint_count}"
+            f"<b>Статистика боя:</b>\n\n"
+            f"✅ <i>Правильных контр действий</i>: <b>{state.correct_count}</b>\n"
+            f"💡 <i>С подсказкой</i>: <b>{state.hint_count}</b>\n"
+            f"🛡️ <i>Отбито контролей</i>: <b>{state.control_count}</b>\n"
+            f"❌ <i>Пропущено атак</i>: <b>{state.missed_attacks}</b>"
         )
         await query.message.reply_text(
             stats_message,
-            parse_mode="HTML",
-            reply_markup=end_fight_keyboard()
+            parse_mode="HTML"
         )
+        # Возврат в главное меню
+        reply_text = TEXTS["nick_set"].format(nick=nickname) + "\nГотовы к сражениям? Выберите, что Вы хотите:"
+        message = await query.message.reply_text(
+            reply_text,
+            parse_mode="HTML",
+            reply_markup=game_menu_keyboard()
+        )
+        state.last_message_id = message.message_id
+        state.last_fight_stats = {
+            "correct_count": state.correct_count,
+            "control_count": state.control_count,
+            "missed_attacks": state.missed_attacks,
+            "hint_count": state.hint_count
+        }
+        context.user_data["state"] = state
         return
     
     await show_move(update, context)
@@ -269,10 +396,11 @@ async def last_stats(update: Update, context: CallbackContext):
     nickname = state.nickname or "Боец"
     if stats:
         message = (
-            f"📊 Прошлая статистика для {nickname}:\n"
-            f"✅ Чистых побед: {stats['correct_count']} из 10\n"
-            f"🎯 Контролей отбито: {stats['control_count']} из 10\n"
-            f"💡 Подсказок использовано: {stats['hint_count']}"
+            f"<b>Статистика боя:</b>\n\n"
+            f"✅ <i>Правильных контр действий</i>: <b>{stats['correct_count']}</b>\n"
+            f"💡 <i>С подсказкой</i>: <b>{stats['hint_count']}</b>\n"
+            f"🛡️ <i>Отбито контролей</i>: <b>{stats['control_count']}</b>\n"
+            f"❌ <i>Пропущено атак</i>: <b>{stats['missed_attacks']}</b>"
         )
     else:
         message = "📊 Нет сохранённой статистики."
@@ -290,8 +418,10 @@ async def pvp_fight_attack(update: Update, context: CallbackContext):
         state.player_control = data.replace("attack_control_", "")
         logger.info(f"PvP: control set to {state.player_control}")
         reply_markup = pvp_attack_keyboard("attack", state.player_control)
-        await query.message.reply_text(
+        await query.message.edit_text(
             TEXTS["pvp_attack"].format(step=state.step),
             parse_mode="HTML",
             reply_markup=reply_markup
         )
+        state.last_message_id = query.message.message_id
+    context.user_data["state"] = state
