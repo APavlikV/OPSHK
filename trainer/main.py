@@ -5,7 +5,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 from telegram.request import HTTPXRequest
-from trainer.handlers import start, game, button, setnick, handle_nick_reply
+from trainer.handlers import start, game, button, setnick, handle_nick_reply, handle_first_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,7 +33,8 @@ async def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setnick", setnick))
-    app.add_handler(MessageHandler(filters.REPLY, handle_nick_reply))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_nick_reply))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_first_message))
     app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
     app.add_handler(CallbackQueryHandler(button))
 
