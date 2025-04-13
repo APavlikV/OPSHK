@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 def get_start_keyboard():
     return ReplyKeyboardMarkup(
         [[KeyboardButton("/start")]],
-        resize_keyboard=True,
-        persistent=True
+        resize_keyboard=True
     )
 
 async def start(update: Update, context: CallbackContext):
@@ -37,8 +36,11 @@ async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
         reply_text,
         parse_mode="HTML",
-        reply_markup=reply_markup,
-        reply_keyboard=get_start_keyboard()
+        reply_markup=reply_markup
+    )
+    await update.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
 
 async def setnick(update: Update, context: CallbackContext):
@@ -46,7 +48,7 @@ async def setnick(update: Update, context: CallbackContext):
     await update.message.reply_text(
         TEXTS["setnick_prompt"],
         parse_mode="HTML",
-        reply_keyboard=get_start_keyboard()
+        reply_markup=get_start_keyboard()
     )
 
 async def handle_nick_reply(update: Update, context: CallbackContext):
@@ -60,7 +62,7 @@ async def handle_nick_reply(update: Update, context: CallbackContext):
         await update.message.reply_text(
             TEXTS["nick_too_long"],
             parse_mode="HTML",
-            reply_keyboard=get_start_keyboard()
+            reply_markup=get_start_keyboard()
         )
         return
     state.nickname = nick or "Вы"
@@ -70,16 +72,22 @@ async def handle_nick_reply(update: Update, context: CallbackContext):
     await update.message.reply_text(
         reply_text,
         parse_mode="HTML",
-        reply_markup=game_menu_keyboard(),
-        reply_keyboard=get_start_keyboard()
+        reply_markup=game_menu_keyboard()
+    )
+    await update.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
 
 async def game(update: Update, context: CallbackContext):
     await update.message.reply_text(
         TEXTS["game_menu"],
         parse_mode="HTML",
-        reply_markup=game_menu_keyboard(),
-        reply_keyboard=get_start_keyboard()
+        reply_markup=game_menu_keyboard()
+    )
+    await update.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
 
 def game_menu_keyboard():
@@ -103,8 +111,11 @@ async def button(update: Update, context: CallbackContext):
         await query.message.reply_text(
             TEXTS["use_telegram_nick"].format(username=nickname),
             parse_mode="HTML",
-            reply_markup=game_menu_keyboard(),
-            reply_keyboard=get_start_keyboard()
+            reply_markup=game_menu_keyboard()
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data == "choose_nick":
         state.awaiting_nick = True
@@ -112,7 +123,7 @@ async def button(update: Update, context: CallbackContext):
         await query.message.reply_text(
             TEXTS["choose_own_nick"],
             parse_mode="HTML",
-            reply_keyboard=get_start_keyboard()
+            reply_markup=get_start_keyboard()
         )
     elif data == "training_menu":
         await query.message.reply_text(
@@ -124,8 +135,11 @@ async def button(update: Update, context: CallbackContext):
                     InlineKeyboardButton("Бой на время", callback_data="timed_fight")
                 ],
                 [InlineKeyboardButton("Памятка", callback_data="training_memo")]
-            ]),
-            reply_keyboard=get_start_keyboard()
+            ])
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data == "pvp_menu":
         await query.message.reply_text(
@@ -136,26 +150,38 @@ async def button(update: Update, context: CallbackContext):
                     InlineKeyboardButton("Начать бой", callback_data="pvp_fight"),
                     InlineKeyboardButton("Правила", callback_data="pvp_rules")
                 ]
-            ]),
-            reply_keyboard=get_start_keyboard()
+            ])
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data == "pvp_arena":
         await query.message.reply_text(
             "🏟 PvP Арена в разработке! Скоро сможете сражаться с другими игроками!",
-            parse_mode="HTML",
-            reply_keyboard=get_start_keyboard()
+            parse_mode="HTML"
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data == "training_memo":
         await query.message.reply_text(
             TEXTS["training_memo"],
-            parse_mode="HTML",
-            reply_keyboard=get_start_keyboard()
+            parse_mode="HTML"
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data == "pvp_rules":
         await query.message.reply_text(
             TEXTS["pvp_rules"],
-            parse_mode="HTML",
-            reply_keyboard=get_start_keyboard()
+            parse_mode="HTML"
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data == "simple_fight":
         await start_simple_fight(update, context)
@@ -166,8 +192,11 @@ async def button(update: Update, context: CallbackContext):
         await query.message.reply_text(
             TEXTS["pvp_start"].format(step=state.step),
             parse_mode="HTML",
-            reply_markup=pvp_attack_keyboard("control"),
-            reply_keyboard=get_start_keyboard()
+            reply_markup=pvp_attack_keyboard("control")
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
     elif data.startswith("defense_"):
         await simple_fight_defense(update, context)
@@ -188,8 +217,11 @@ async def start_simple_fight(update: Update, context: CallbackContext):
     nickname = state.nickname or "Боец"
     await update.callback_query.message.reply_text(
         f"⚔️ {nickname}, начинаем бой!",
-        parse_mode="HTML",
-        reply_keyboard=get_start_keyboard()
+        parse_mode="HTML"
+    )
+    await update.callback_query.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
     await show_move(update, context)
 
@@ -217,8 +249,11 @@ async def show_move(update: Update, context: CallbackContext):
     await update.callback_query.message.reply_text(
         reply_text,
         parse_mode="HTML",
-        reply_markup=reply_markup,
-        reply_keyboard=get_start_keyboard()
+        reply_markup=reply_markup
+    )
+    await update.callback_query.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
 
 async def simple_fight_defense(update: Update, context: CallbackContext):
@@ -239,8 +274,11 @@ async def simple_fight_defense(update: Update, context: CallbackContext):
     log = generate_detailed_log(control, attack, chosen_defense, is_success, nickname)
     await query.message.reply_text(
         log,
-        parse_mode="HTML",
-        reply_keyboard=get_start_keyboard()
+        parse_mode="HTML"
+    )
+    await query.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
     
     state.current_step += 1
@@ -260,8 +298,11 @@ async def simple_fight_defense(update: Update, context: CallbackContext):
         await query.message.reply_text(
             stats_message,
             parse_mode="HTML",
-            reply_markup=end_fight_keyboard(),
-            reply_keyboard=get_start_keyboard()
+            reply_markup=end_fight_keyboard()
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
         return
     
@@ -282,8 +323,11 @@ async def last_stats(update: Update, context: CallbackContext):
         message = "📊 Нет сохранённой статистики."
     await update.callback_query.message.reply_text(
         message,
-        parse_mode="HTML",
-        reply_keyboard=get_start_keyboard()
+        parse_mode="HTML"
+    )
+    await update.callback_query.message.reply_text(
+        "Выберите действие:",
+        reply_markup=get_start_keyboard()
     )
 
 async def pvp_fight_attack(update: Update, context: CallbackContext):
@@ -298,6 +342,9 @@ async def pvp_fight_attack(update: Update, context: CallbackContext):
         await query.message.reply_text(
             TEXTS["pvp_attack"].format(step=state.step),
             parse_mode="HTML",
-            reply_markup=reply_markup,
-            reply_keyboard=get_start_keyboard()
+            reply_markup=reply_markup
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_start_keyboard()
         )
