@@ -52,7 +52,7 @@ def generate_detailed_log(control, attack, defense, is_success, nickname):
     else:
         return (
             f"⚔️ Тори Бот Вася {control_phrase} ({control}) ✅, "
-            f"{attack_phrase} ({control}) ✅\n"
+            f"{attack_phrase} ({attack}) ✅\n"
             f"🛡️ Уке {nickname} {defense_phrase} ({defense})! ❌\n"
             f"💥 КРАХ! {nickname} пропускает удар! ПОРАЖЕНИЕ!"
         )
