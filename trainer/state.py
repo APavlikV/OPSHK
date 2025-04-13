@@ -9,7 +9,7 @@ class GameState:
         self.player_defense = None
         self.bot_control = None
         self.bot_attack = None
-        self.fight_sequence = None
+        self.fight_sequence = []  # Изменили None на [], так как ожидается список
         self.current_step = 0
         self.correct_count = 0
         self.control_count = 0
@@ -17,6 +17,9 @@ class GameState:
         self.last_message_id = None
         self.current_timer = None
         self.nickname = None
+        self.total_points = 0  # Добавили
+        self.missed_attacks = 0  # Добавили
+        self.last_fight_message_id = None  # Добавили
 
     def reset(self):
         # Сохраняем nickname между боями
