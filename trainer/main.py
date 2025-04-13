@@ -1,15 +1,10 @@
 import os
-import sys
 import logging
 import asyncio
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 from telegram.request import HTTPXRequest
-
-# Добавляем корень проекта в sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from trainer.handlers import start, game, button, setnick, handle_nick_reply
 
 logging.basicConfig(
