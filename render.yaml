@@ -8,6 +8,6 @@ services:
       python3.9 -m venv .venv
       .venv/bin/python3.9 -m pip install --upgrade pip
       .venv/bin/pip install --no-cache-dir -r requirements.txt
-    startCommand: "python trainer/main.py"
+    startCommand: "python -m trainer.main"
     repo: https://github.com/APavlikV/OPSHK
     branch: main
