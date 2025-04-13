@@ -333,40 +333,49 @@ async def simple_fight_defense(update: Update, context: CallbackContext):
     chosen_defense = query.data.replace("defense_", "")
     control, attack = state.fight_sequence[state.current_step]
     
-    logger.debug(f"simple_fight_defense: control={control}, attack={attack}, chosen_defense={chosen_defense}")
-    
-    is_success, partial_success, correct_defenses = check_move(control, attack, chosen_defense)
+    is_success, partial_success, correct_defenses, points = check_move(control, attack, chosen_defense)
     
     if is_success:
         state.correct_count += 1
         state.control_count += 1
-    elif control in DEFENSE_MOVES.get(chosen_defense, {}).get("control", []):
+    elif control in DEFENSE_MOVES.get(chosen_defense, {}).get("control_defense", []):
         state.control_count += 1
+    elif attack in DEFENSE_MOVES.get(chosen_defense, {}).get("attack_defense", []):
+        pass
     else:
         state.missed_attacks += 1
+    
+    state.total_points += points
     
     nickname = state.nickname or "Боец"
     log = generate_detailed_log(control, attack, chosen_defense, is_success, nickname)
     
-    # Перезаписываем сообщение с заданием, без подсказки
     task_text = (
-        f"<u>⚔️ Схватка {state.current_step + 1} из 10</u>\n\n"
+        f"<code>⚔️ Схватка {state.current_step + 1} из 10</code>\n\n"
         f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
         f"💥 <i>Атака</i>: <b>{attack}</b>\n"
         f"🛡️ <i>Ваша защита</i>: <b>{chosen_defense}</b>\n\n"
     )
-    result_text = "✅ <b>УСПЕХ</b>" if is_success else (
-        f"❌ <b>ПОРАЖЕНИЕ</b>\n<i>Правильно</i>: <b>{', '.join(correct_defenses) if correct_defenses else 'нет защиты'}</b>"
+    result_text = (
+        f"✅ <b>ЧИСТАЯ ПОБЕДА</b> (+{points} баллов)"
+        if is_success else (
+            f"✅ <b>ЧАСТИЧНЫЙ УСПЕХ</b> (+{points} баллов)"
+            if partial_success else
+            f"❌ <b>ПОРАЖЕНИЕ</b> (+{points} баллов)"
+        )
     )
+    hint_text = (
+        f"💡 <b>Подсказка</b>: правильная защита — {', '.join(correct_defenses) if correct_defenses else 'нет подходящей защиты'}"
+    )
+    
     await context.bot.edit_message_text(
-        text=task_text + result_text,
+        text=task_text + result_text + "\n\n" + hint_text,
         chat_id=query.message.chat_id,
         message_id=state.last_fight_message_id,
         parse_mode="HTML",
         reply_markup=None
     )
     
-    # Отправляем лог схватки
     await query.message.reply_text(
         log,
         parse_mode="HTML"
