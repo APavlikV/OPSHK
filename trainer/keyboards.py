@@ -10,7 +10,7 @@ def pvp_attack_keyboard(step, control=None):
             ]
         ])
     elif step == "attack":
-        moves = ["СС", "ТР", "ДЗ"]  # Дефолт
+        moves = ["СС", "ТР", "ДЗ"]
         if control == "ДЗ":
             moves = ["СС", "ТР", "ГДН"]
         elif control == "ТР":
