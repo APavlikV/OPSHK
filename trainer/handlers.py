@@ -25,6 +25,10 @@ async def start(update: Update, context: CallbackContext):
         reply_markup=reply_markup
     )
 
+async def setnick(update: Update, context: CallbackContext):
+    await update.message.reply_text("💡 Напиши свой новый ник:")
+    return NICKNAME
+
 async def button(update: Update, context: CallbackContext):
     query = update.callback_query
     state = context.user_data.get("state", GameState())
@@ -62,7 +66,7 @@ async def game(update: Update, context: CallbackContext):
     if not state.nickname:
         telegram_nick = update.effective_user.username or update.effective_user.first_name
         state.nickname = telegram_nick
-    state.mode = "training"  # Устанавливаем режим
+    state.mode = "training"
     context.user_data["state"] = state
     await start_fight(update, context)
 
