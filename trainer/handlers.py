@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackContext, ConversationHandler
-from trainer.data import MOVES, DEFENSE_MOVES, CONTROLS, ATTACKS
+from trainer.data import MOVES, DEFENSE_MOVES
 from trainer.game_logic import check_move, generate_detailed_log
 from trainer.state import GameState
 import random
@@ -10,55 +10,70 @@ NICKNAME = 0
 
 async def start(update: Update, context: CallbackContext):
     state = GameState()
-    state.nickname = update.effective_user.first_name
+    telegram_nick = update.effective_user.username or update.effective_user.first_name
     context.user_data["state"] = state
+
+    keyboard = [
+        [InlineKeyboardButton(f"Использовать {telegram_nick}", callback_data=f"nick_{telegram_nick}")],
+        [InlineKeyboardButton("Выбрать свой", callback_data="nick_custom")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(
-        f"👊 Привет, {state.nickname}! Я Тори Бот Вася, твой спарринг-партнёр по каратэ! 🥋\n"
-        "Готов потренироваться? Выбирай режим:\n"
-        "/game — Простой бой (10 схваток)\n"
-        "/setnick — Сменить ник\n"
-        "Погнали?"
+        f"🥋 Добро пожаловать в КАРАТЭ тренажер!\n"
+        f"Использовать ваш ник Telegram ({telegram_nick}) или выбрать свой?",
+        reply_markup=reply_markup
     )
 
-async def setnick(update: Update, context: CallbackContext):
-    await update.message.reply_text("💡 Напиши свой новый ник:")
-    return NICKNAME
+async def button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    state = context.user_data.get("state", GameState())
+
+    if query.data.startswith("nick_"):
+        if query.data == "nick_custom":
+            await query.message.reply_text("💡 Напиши свой новый ник:")
+            return NICKNAME
+        else:
+            state.nickname = query.data.replace("nick_", "")
+            context.user_data["state"] = state
+            await context.bot.edit_message_text(
+                text=f"✅ Ник установлен: {state.nickname}\nГотов к бою? Напиши /game",
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
+            )
+    elif query.data.startswith("defense_"):
+        await simple_fight_defense(update, context)
+    
+    await query.answer()
+    return ConversationHandler.END
 
 async def handle_nick_reply(update: Update, context: CallbackContext):
     state = context.user_data.get("state", GameState())
     state.nickname = update.message.text.strip()
     context.user_data["state"] = state
-    await update.message.reply_text(f"✅ Ник изменён на {state.nickname}! Готов к бою? Напиши /game")
+    await update.message.reply_text(f"✅ Ник установлен: {state.nickname}\nГотов к бою? Напиши /game")
     return ConversationHandler.END
 
 async def handle_first_message(update: Update, context: CallbackContext):
-    state = GameState()
-    state.nickname = update.effective_user.first_name
-    context.user_data["state"] = state
-    await update.message.reply_text(
-        f"👊 Привет, {state.nickname}! Я Тори Бот Вася, твой спарринг-партнёр по каратэ! 🥋\n"
-        "Готов потренироваться? Выбирай режим:\n"
-        "/game — Простой бой (10 схваток)\n"
-        "/setnick — Сменить ник\n"
-        "Погнали?"
-    )
+    await start(update, context)
 
 async def game(update: Update, context: CallbackContext):
     state = context.user_data.get("state", GameState())
     if not state.nickname:
-        state.nickname = update.effective_user.first_name
+        telegram_nick = update.effective_user.username or update.effective_user.first_name
+        state.nickname = telegram_nick
+    state.mode = "training"  # Устанавливаем режим
+    context.user_data["state"] = state
     await start_fight(update, context)
 
-async def button(update: Update, context: CallbackContext):
-    query = update.callback_query
-    if query.data.startswith("defense_"):
-        await simple_fight_defense(update, context)
-    await query.answer()
-
 async def start_fight(update: Update, context: CallbackContext):
-    state = GameState()
+    state = context.user_data.get("state", GameState())
     state.fight_sequence = random.sample(MOVES, 10)
-    state.nickname = update.effective_user.first_name
+    state.current_step = 0
+    state.correct_count = 0
+    state.control_count = 0
+    state.missed_attacks = 0
+    state.total_points = 0
     context.user_data["state"] = state
 
     keyboard = [
