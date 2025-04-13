@@ -1,3 +1,10 @@
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackContext
+from trainer.data import MOVES, DEFENSE_MOVES
+from trainer.game_logic import check_move, generate_detailed_log
+from trainer.state import GameState
+import random
+
 async def start_fight(update: Update, context: CallbackContext):
     state = GameState()
     state.fight_sequence = random.sample(MOVES, 10)
