@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
@@ -20,10 +21,14 @@ async def cmd_start(message: Message):
         "Добро пожаловать в OPSHK! 💪\nВведи уникальное имя своего бойца:"
     )
 
-if __name__ == "__main__":
+async def start_polling():
     logger.info("Starting bot polling")
     setup_handlers(dp)
     try:
-        dp.run_polling(bot, skip_updates=True)
+        await asyncio.sleep(5)  # Задержка 5 секунд
+        await dp.start_polling(bot, skip_updates=True)
     except Exception as e:
         logger.error(f"Polling failed: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(start_polling())
