@@ -1,30 +1,5 @@
-class GameState:
-    def __init__(self):
-        self.mode = None  # "training", "pvp"
-        self.player_score = 0
-        self.bot_score = 0
-        self.step = 0
-        self.player_control = None
-        self.player_attack = None
-        self.player_defense = None
-        self.bot_control = None
-        self.bot_attack = None
-        self.fight_sequence = []
-        self.current_step = 0
-        self.correct_count = 0
-        self.control_count = 0
-        self.hint_count = 0
-        self.last_message_id = None
-        self.current_timer = None
-        self.nickname = None
-        self.total_points = 0
-        self.missed_attacks = 0
-        self.last_fight_message_id = None
+from aiogram.fsm.state import State, StatesGroup
 
-    def reset(self):
-        nickname = self.nickname
-        self.__init__()
-        self.nickname = nickname
-
-    def to_dict(self):
-        return vars(self)
+class FightState(StatesGroup):
+    waiting_for_name = State()
+    waiting_for_defense = State()
