@@ -2,7 +2,7 @@ services:
   - type: web
     name: opshk-bot
     env: python
-    python_version: 3.11  # Было 3.8.1
+    python_version: 3.11
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
