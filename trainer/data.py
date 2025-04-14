@@ -42,6 +42,7 @@ def init_db():
                 time.sleep(5)  # Ждём 5 секунд перед повтором
             else:
                 raise
+
 def save_fighter(user_id, fighter_name):
     for attempt in range(3):
         try:
@@ -50,7 +51,7 @@ def save_fighter(user_id, fighter_name):
                 database=os.getenv("DB_NAME"),
                 user=os.getenv("DB_USER"),
                 password=os.getenv("DB_PASS"),
-                ssl carnivore="require"
+                sslmode="require"
             )
             cur = conn.cursor()
             cur.execute("INSERT INTO users (user_id, fighter_name) VALUES (%s, %s)", (user_id, fighter_name))
