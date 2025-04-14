@@ -1,2 +1,4 @@
-python-telegram-bot[job-queue,webhooks]>=20.8
-pip>=25.0.1  # Явно требуем новую версию pip
+aiogram==3.4.1
+psycopg2-binary==2.9.9
+redis==5.0.1
+python-dotenv==1.0.1
