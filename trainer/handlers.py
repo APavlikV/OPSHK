@@ -2,13 +2,21 @@ import logging
 from aiogram import Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from trainer.keyboards import get_fight_keyboard, get_nickname_keyboard
 from trainer.texts import FIGHT_TEXT, PROFILE_TEXT
 from trainer.state import FightState
 from trainer.data import save_fighter
 
 logger = logging.getLogger(__name__)
+
+def get_next_steps_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Бой 🥊", callback_data="start_fight"),
+            InlineKeyboardButton(text="Профиль 📊", callback_data="show_profile")
+        ]
+    ])
 
 def setup_handlers(dp: Dispatcher):
     @dp.message(Command("profile"))
@@ -27,7 +35,11 @@ def setup_handlers(dp: Dispatcher):
         user_id = callback.from_user.id
         try:
             save_fighter(user_id, username)
-            await callback.message.edit_text(f"Ник сохранён: {username}! Готов к бою? 💪")
+            await callback.message.edit_text(
+                f"Ник сохранён: <b>{username}! Готов к бою?</b> 💪",
+                parse_mode="HTML",
+                reply_markup=get_next_steps_keyboard()
+            )
             await state.clear()
         except Exception as e:
             logger.error(f"Save fighter failed: {e}")
@@ -47,11 +59,16 @@ def setup_handlers(dp: Dispatcher):
         user_id = message.from_user.id
         try:
             save_fighter(user_id, nickname)
-            await message.answer(f"Ник сохранён: {nickname}! Готов к бою? 💪")
+            await message.answer(
+                f"Ник сохранён: <b>{nickname}! Готов к бою?</b> 💪",
+                parse_mode="HTML",
+                reply_markup=get_next_steps_keyboard()
+            )
             await state.clear()
         except Exception as e:
             logger.error(f"Save fighter failed: {e}")
             await message.answer(f"Ошибка сохранения: {e}")
+            await state.clear()
 
     @dp.callback_query()
     async def debug_callback(callback: CallbackQuery):
