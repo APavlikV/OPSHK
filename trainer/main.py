@@ -50,8 +50,11 @@ async def main():
         webhook_url = f"https://{hostname}{webhook_path}"
 
         logger.info(f"Setting webhook: {webhook_url}")
-        await bot.delete_webhook()  # Сбрасываем старый вебхук
-        await bot.set_webhook(webhook_url)
+        await bot.delete_webhook()
+        await bot.set_webhook(
+            webhook_url,
+            allowed_updates=["message", "callback_query"]
+        )
 
         app = web.Application()
         webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
