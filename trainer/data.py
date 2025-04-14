@@ -15,7 +15,7 @@ def init_db():
                 database=os.getenv("DB_NAME"),
                 user=os.getenv("DB_USER"),
                 password=os.getenv("DB_PASS"),
-                sslmode="require"
+                connect_timeout=10
             )
             cur = conn.cursor()
             cur.execute("""
@@ -39,7 +39,7 @@ def init_db():
         except psycopg2.OperationalError as e:
             logger.error(f"Database connection failed (attempt {attempt + 1}): {e}")
             if attempt < 2:
-                time.sleep(5)  # Ждём 5 секунд перед повтором
+                time.sleep(5)
             else:
                 raise
 
@@ -51,7 +51,7 @@ def save_fighter(user_id, fighter_name):
                 database=os.getenv("DB_NAME"),
                 user=os.getenv("DB_USER"),
                 password=os.getenv("DB_PASS"),
-                sslmode="require"
+                connect_timeout=10
             )
             cur = conn.cursor()
             cur.execute("INSERT INTO users (user_id, fighter_name) VALUES (%s, %s)", (user_id, fighter_name))
