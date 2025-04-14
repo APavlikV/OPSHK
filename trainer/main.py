@@ -8,6 +8,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiohttp import web
 from dotenv import load_dotenv
 from trainer.handlers import setup_handlers
+from trainer.data import init_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,12 +20,18 @@ dp = Dispatcher()
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     logger.info(f"User {message.from_user.id} started bot")
+    username = message.from_user.username or "PAndrew"
     await message.answer(
-        "Добро пожаловать в OPSHK! 💪\nВведи уникальное имя своего бойца:"
+        f"🥋 <b>Добро пожаловать в КАРАТЭ тренажер!</b>\n"
+        f"Использовать ваш <b>ник Telegram ({username})</b> или <b>выбрать свой</b>?",
+        parse_mode="HTML",
+        reply_markup=get_nickname_keyboard()
     )
 
 async def main():
     logger.info("🚀 Запуск Telegram-бота...")
+    logger.info("Initializing database")
+    init_db()  # Создаём таблицы
     setup_handlers(dp)
     try:
         # Настройка вебхука
