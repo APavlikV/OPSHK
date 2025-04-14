@@ -4,6 +4,8 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 from dotenv import load_dotenv
 from trainer.handlers import setup_handlers
 
@@ -21,15 +23,39 @@ async def cmd_start(message: Message):
         "Добро пожаловать в OPSHK! 💪\nВведи уникальное имя своего бойца:"
     )
 
-async def start_polling():
-    logger.info("Starting bot polling")
+async def main():
+    logger.info("🚀 Запуск Telegram-бота...")
     setup_handlers(dp)
     try:
-        await asyncio.sleep(10)  # Задержка 10 секунд
-        await bot.delete_webhook()  # Сброс вебхука (на всякий случай)
-        await dp.start_polling(bot, skip_updates=True, drop_pending_updates=True)
+        # Настройка вебхука
+        webhook_path = "/webhook"
+        hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+        port = int(os.getenv("PORT", "10000"))
+        webhook_url = f"https://{hostname}{webhook_path}"
+
+        logger.info(f"Setting webhook: {webhook_url}")
+        await bot.set_webhook(webhook_url)
+
+        # Настройка aiohttp-сервера
+        app = web.Application()
+        webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+        webhook_handler.register(app, path=webhook_path)
+        setup_application(app, dp, bot=bot)
+
+        # Запуск сервера
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", port)
+        logger.info(f"Starting webhook server on port {port}")
+        await site.start()
+
+        # Держим сервер запущенным
+        await asyncio.Event().wait()
     except Exception as e:
-        logger.error(f"Polling failed: {e}")
+        logger.error(f"Webhook failed: {e}")
+    finally:
+        await bot.delete_webhook()
+        await dp.storage.close()
 
 if __name__ == "__main__":
-    asyncio.run(start_polling())
+    asyncio.run(main())
