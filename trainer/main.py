@@ -33,13 +33,13 @@ async def main():
     logger.info("🚀 Запуск Telegram-бота...")
     try:
         logger.info("Initializing database")
-        init_db()  # Создаём таблицы
+        init_db()
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
-        # Продолжаем без базы
+    logger.info("Setting up handlers")
     setup_handlers(dp)
+    logger.info("Handlers set up successfully")
     try:
-        # Настройка вебхука
         webhook_path = "/webhook"
         hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
         port = int(os.getenv("PORT", "10000"))
@@ -48,20 +48,17 @@ async def main():
         logger.info(f"Setting webhook: {webhook_url}")
         await bot.set_webhook(webhook_url)
 
-        # Настройка aiohttp-сервера
         app = web.Application()
         webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
         webhook_handler.register(app, path=webhook_path)
         setup_application(app, dp, bot=bot)
 
-        # Запуск сервера
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", port)
         logger.info(f"Starting webhook server on port {port}")
         await site.start()
 
-        # Держим сервер запущенным
         await asyncio.Event().wait()
     except Exception as e:
         logger.error(f"Webhook failed: {e}")
