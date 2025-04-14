@@ -1,3 +1,4 @@
+import logging
 from aiogram import Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -6,6 +7,8 @@ from trainer.keyboards import get_fight_keyboard, get_nickname_keyboard
 from trainer.texts import FIGHT_TEXT, PROFILE_TEXT
 from trainer.state import FightState
 from trainer.data import save_fighter
+
+logger = logging.getLogger(__name__)
 
 def setup_handlers(dp: Dispatcher):
     @dp.message(Command("profile"))
@@ -16,6 +19,11 @@ def setup_handlers(dp: Dispatcher):
     async def cmd_fight(message: types.Message):
         keyboard = get_fight_keyboard()
         await message.answer(FIGHT_TEXT, reply_markup=keyboard)
+
+    @dp.callback_query()
+    async def debug_callback(callback: CallbackQuery):
+        logger.info(f"Received callback: {callback.data} from {callback.from_user.id}")
+        await callback.answer()
 
     @dp.callback_query(F.data == "use_telegram_nick")
     async def use_telegram_nick(callback: CallbackQuery, state: FSMContext):
