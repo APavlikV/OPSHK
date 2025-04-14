@@ -3,7 +3,7 @@ import logging
 import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, Update
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from dotenv import load_dotenv
@@ -29,6 +29,10 @@ async def cmd_start(message: Message):
         reply_markup=get_nickname_keyboard()
     )
 
+@dp.update()
+async def debug_update(update: Update):
+    logger.info(f"Received update: {update}")
+
 async def main():
     logger.info("🚀 Запуск Telegram-бота...")
     try:
@@ -46,6 +50,7 @@ async def main():
         webhook_url = f"https://{hostname}{webhook_path}"
 
         logger.info(f"Setting webhook: {webhook_url}")
+        await bot.delete_webhook()  # Сбрасываем старый вебхук
         await bot.set_webhook(webhook_url)
 
         app = web.Application()
