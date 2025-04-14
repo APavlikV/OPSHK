@@ -25,8 +25,9 @@ async def start_polling():
     logger.info("Starting bot polling")
     setup_handlers(dp)
     try:
-        await asyncio.sleep(5)  # Задержка 5 секунд
-        await dp.start_polling(bot, skip_updates=True)
+        await asyncio.sleep(10)  # Задержка 10 секунд
+        await bot.delete_webhook()  # Сброс вебхука (на всякий случай)
+        await dp.start_polling(bot, skip_updates=True, drop_pending_updates=True)
     except Exception as e:
         logger.error(f"Polling failed: {e}")
 
