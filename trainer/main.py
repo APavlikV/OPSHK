@@ -1,68 +1,20 @@
 import os
-import logging
-import asyncio
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-)
-from telegram.request import HTTPXRequest
-from trainer.handlers import start, game, button, setnick, handle_nick_reply, handle_first_message
+from aiogram import Bot, Dispatcher
+from aiogram.filters import Command
+from aiogram import types
+from dotenv import load_dotenv
+from trainer.handlers import setup_handlers
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+load_dotenv()
+bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
+dp = Dispatcher()
 
-def get_env_variable(name: str, required: bool = True, default=None):
-    value = os.getenv(name, default)
-    if required and not value:
-        logger.error(f"Переменная окружения '{name}' не задана!")
-        raise EnvironmentError(f"{name} not set")
-    return value
-
-async def main():
-    logger.info("🚀 Запуск Telegram-бота...")
-
-    token = get_env_variable("TELEGRAM_TOKEN")
-    hostname = get_env_variable("RENDER_EXTERNAL_HOSTNAME")
-    port = int(os.getenv("PORT", "10000"))
-
-    request = HTTPXRequest(read_timeout=60, connect_timeout=60)
-
-    app = Application.builder().token(token).request(request).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setnick", setnick))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_nick_reply))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_first_message))
-    app.add_handler(MessageHandler(filters.Text(["Игра"]), game))
-    app.add_handler(CallbackQueryHandler(button))
-
-    webhook_url = f"https://{hostname}/{token}"
-    logger.info(f"🌐 Установка webhook: {webhook_url}")
-
-    await app.initialize()
-    await app.start()
-    await app.updater.start_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=token,
-        webhook_url=webhook_url
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    await message.answer(
+        "Добро пожаловать в OPSHK! 💪\nВведи уникальное имя своего бойца:"
     )
 
-    logger.info(f"✅ Вебхук активен на порту {port}")
-
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("🛑 Остановка бота...")
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
-
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logger.exception(f"❌ Ошибка при запуске бота: {e}")
+    setup_handlers(dp)
+    dp.run_polling(bot)
