@@ -9,6 +9,7 @@ from aiohttp import web
 from dotenv import load_dotenv
 from trainer.handlers import setup_handlers
 from trainer.data import init_db
+from trainer.keyboards import get_nickname_keyboard
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
