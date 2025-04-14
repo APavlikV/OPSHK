@@ -31,8 +31,12 @@ async def cmd_start(message: Message):
 
 async def main():
     logger.info("🚀 Запуск Telegram-бота...")
-    logger.info("Initializing database")
-    init_db()  # Создаём таблицы
+    try:
+        logger.info("Initializing database")
+        init_db()  # Создаём таблицы
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        # Продолжаем без базы
     setup_handlers(dp)
     try:
         # Настройка вебхука
