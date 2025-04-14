@@ -70,6 +70,25 @@ def setup_handlers(dp: Dispatcher):
             await message.answer(f"Ошибка сохранения: {e}")
             await state.clear()
 
+    @dp.callback_query(F.data == "start_fight")
+    async def start_fight(callback: CallbackQuery):
+        logger.info(f"Button start_fight pressed by {callback.from_user.id}")
+        await callback.message.edit_text(
+            "🥊 <b>Бой начинается!</b>\nВыбери технику для атаки!",
+            parse_mode="HTML",
+            reply_markup=get_fight_keyboard()
+        )
+        await callback.answer()
+
+    @dp.callback_query(F.data == "show_profile")
+    async def show_profile(callback: CallbackQuery):
+        logger.info(f"Button show_profile pressed by {callback.from_user.id}")
+        await callback.message.edit_text(
+            f"📊 <b>Твой профиль</b>\nИмя: {callback.from_user.username or 'Неизвестный'}\nПока статистики нет!",
+            parse_mode="HTML"
+        )
+        await callback.answer()
+
     @dp.callback_query()
     async def debug_callback(callback: CallbackQuery):
         logger.info(f"Received callback: {callback.data} from {callback.from_user.id}")
