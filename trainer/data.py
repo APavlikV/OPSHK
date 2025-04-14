@@ -1,51 +1,43 @@
-MOVES = [
-    ("СС", "ДЗ"), ("СС", "ТР"), ("СС", "СС"),
-    ("ТР", "ДЗ"), ("ТР", "СС"), ("ТР", "ТР"), ("ТР", "ГДН"),
-    ("ДЗ", "ТР"), ("ДЗ", "СС"), ("ДЗ", "ГДН")
-]
+import psycopg2
+from dotenv import load_dotenv
+import os
 
-DEFENSE_MOVES = {
-    "Аге уке": {
-        "control_defense": ["СС"],
-        "counterattack": ["СС", "ТР"],
-        "attack_defense": ["ДЗ"]
-    },
-    "Сото уке": {
-        "control_defense": ["СС", "ТР"],
-        "counterattack": ["СС", "ДЗ"],
-        "attack_defense": ["СС", "ТР", "ДЗ"]
-    },
-    "Учи уке": {
-        "control_defense": ["СС"],
-        "counterattack": ["ТР", "ДЗ"],
-        "attack_defense": ["СС", "ТР", "ДЗ"]
-    },
-    "Гедан барай": {
-        "control_defense": ["ТР", "ДЗ"],
-        "counterattack": ["СС", "ТР", "ГДН"],
-        "attack_defense": ["СС", "ТР", "ГДН"]
-    }
-}
+load_dotenv()
 
-CONTROLS = sorted(set(control for control, _ in MOVES))
-ATTACKS = sorted(set(attack for _, attack in MOVES))
+def init_db():
+    conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASS")
+    )
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id BIGINT PRIMARY KEY,
+            fighter_name TEXT
+        );
+        CREATE TABLE IF NOT EXISTS fights (
+            user_id BIGINT,
+            clean_wins INTEGER,
+            partial_success INTEGER,
+            losses INTEGER,
+            hints_used INTEGER
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
 
-CONTROL_PHRASES = {
-    "ДЗ": ["метит в голову", "целится в нос", "хочет захватить волосы", "проверяет чердак", "идёт за мозгами"],
-    "СС": ["метит в печень", "целится в центр", "идёт за селезёнкой", "хочет пробить пузо", "нацеливается на котлетницу"],
-    "ТР": ["метит в трахею", "хитро целится в грудь", "пытается взять за грудки", "идёт за сердцем", "целится в рёбра"]
-}
-
-ATTACK_PHRASES = {
-    "ДЗ": ["бьёт в нос", "атакует челюсть", "наносит удар в голову", "залепил в нос", "пробил чердак", "настучал по макушке", "вмазал по мозгам"],
-    "СС": ["бьёт в печень", "атакует селезёнку", "идёт в центр", "вмазал по кишкам", "залепил по котлетнице", "прописал по пузику", "дал по животному отсеку"],
-    "ТР": ["бьёт в трахею", "атакует грудь", "целит в сердце", "зарядил в грудь", "пробил по грудине", "дал по сердцу"],
-    "ГДН": ["бьёт по бубенчикам", "атакует живот", "ломает ноги", "зарядил по семейным драгоценностям", "прописал по зоне 18+", "врезал по нижнему этажу", "дал по нижнему регистру"]
-}
-
-DEFENSE_PHRASES = {
-    "Гедан барай": ["ставит Гедан барай", "оформляет Гедан барай", "применяет Гедан барай", "закрывает Гедан барай", "бьёт Гедан барай"],
-    "Учи уке": ["вкручивает Учи уке", "ставит Учи уке", "ловко использует Учи уке", "вертит Учи уке", "держит Учи уке"],
-    "Сото уке": ["ставит Сото уке", "соображает Сото уке", "твёрдо держит Сото уке", "блокирует Сото уке", "выставляет Сото уке"],
-    "Аге уке": ["подбрасывает Аге уке", "запечатлеет Аге уке", "выписывает Аге уке", "взлетает с Аге уке", "швыряет Аге уке"]
-}
+def save_fighter(user_id, fighter_name):
+    conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASS")
+    )
+    cur = conn.cursor()
+    cur.execute("INSERT INTO users (user_id, fighter_name) VALUES (%s, %s)", (user_id, fighter_name))
+    conn.commit()
+    cur.close()
+    conn.close()
