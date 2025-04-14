@@ -1,6 +1,6 @@
 import logging
-from aiogram import Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram import Dispatcher, types
+from aiogram.filters import Command, CallbackQueryFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 from trainer.keyboards import get_fight_keyboard, get_nickname_keyboard
@@ -20,12 +20,7 @@ def setup_handlers(dp: Dispatcher):
         keyboard = get_fight_keyboard()
         await message.answer(FIGHT_TEXT, reply_markup=keyboard)
 
-    @dp.callback_query()
-    async def debug_callback(callback: CallbackQuery):
-        logger.info(f"Received callback: {callback.data} from {callback.from_user.id}")
-        await callback.answer()
-
-    @dp.callback_query(F.data == "use_telegram_nick")
+    @dp.callback_query(CallbackQueryFilter(callback_data="use_telegram_nick"))
     async def use_telegram_nick(callback: CallbackQuery, state: FSMContext):
         logger.info(f"Button use_telegram_nick pressed by {callback.from_user.id}")
         username = callback.from_user.username or f"User{callback.from_user.id}"
@@ -35,10 +30,11 @@ def setup_handlers(dp: Dispatcher):
             await callback.message.edit_text(f"Ник сохранён: {username}! Готов к бою? 💪")
             await state.clear()
         except Exception as e:
+            logger.error(f"Save fighter failed: {e}")
             await callback.message.edit_text(f"Ошибка сохранения: {e}")
         await callback.answer()
 
-    @dp.callback_query(F.data == "custom_nick")
+    @dp.callback_query(CallbackQueryFilter(callback_data="custom_nick"))
     async def custom_nick(callback: CallbackQuery, state: FSMContext):
         logger.info(f"Button custom_nick pressed by {callback.from_user.id}")
         await callback.message.edit_text("Введи свой уникальный ник:")
@@ -54,4 +50,10 @@ def setup_handlers(dp: Dispatcher):
             await message.answer(f"Ник сохранён: {nickname}! Готов к бою? 💪")
             await state.clear()
         except Exception as e:
+            logger.error(f"Save fighter failed: {e}")
             await message.answer(f"Ошибка сохранения: {e}")
+
+    @dp.callback_query()
+    async def debug_callback(callback: CallbackQuery):
+        logger.info(f"Received callback: {callback.data} from {callback.from_user.id}")
+        await callback.answer()
