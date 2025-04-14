@@ -19,6 +19,7 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data == "use_telegram_nick")
     async def use_telegram_nick(callback: CallbackQuery, state: FSMContext):
+        logger.info(f"Button use_telegram_nick pressed by {callback.from_user.id}")
         username = callback.from_user.username or f"User{callback.from_user.id}"
         user_id = callback.from_user.id
         try:
@@ -31,6 +32,7 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data == "custom_nick")
     async def custom_nick(callback: CallbackQuery, state: FSMContext):
+        logger.info(f"Button custom_nick pressed by {callback.from_user.id}")
         await callback.message.edit_text("Введи свой уникальный ник:")
         await state.set_state(FightState.waiting_for_name)
         await callback.answer()
