@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from .keyboards import get_nickname_keyboard
 from .texts import PROFILE_TEXT
 from .state import FightState
-from .data import save_fighter, save_fight
+from .data import save_fighter, save_fight, get_db_connection
 from .game_logic import check_defense, MOVES
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,33 @@ def get_next_steps_keyboard() -> InlineKeyboardMarkup:
 def setup_handlers(dp: Dispatcher):
     @dp.message(Command("profile"))
     async def cmd_profile(message: types.Message):
-        await message.answer(PROFILE_TEXT)
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT fighter_name, life, strength, agility, spirit, belt FROM users_dev JOIN profiles_dev ON users_dev.user_id = profiles_dev.user_id WHERE users_dev.user_id = %s", (message.from_user.id,))
+            result = cursor.fetchone()
+            if result:
+                name, life, strength, agility, spirit, belt = result
+                await message.answer(
+                    f"📊 <b>Твой профиль</b>\n"
+                    f"Имя: {name}\n"
+                    f"Жизнь: {life} ❤️\n"
+                    f"Сила: {strength} 💪\n"
+                    f"Ловкость: {agility} 🌀\n"
+                    f"Дух: {spirit} ✨\n"
+                    f"Пояс: {belt} 🟡",
+                    parse_mode="HTML"
+                )
+            else:
+                await message.answer("Профиль не найден!")
+        except Exception as e:
+            logger.error(f"Profile fetch failed: {e}")
+            await message.answer(f"Ошибка: {e}")
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
 
     @dp.message(Command("fight"))
     async def cmd_fight(message: types.Message, state: FSMContext):
@@ -171,7 +197,7 @@ def setup_handlers(dp: Dispatcher):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT fighter_name, life, strength, agility, spirit, belt FROM users JOIN profiles ON users.user_id = profiles.user_id WHERE users.user_id = %s", (callback.from_user.id,))
+            cursor.execute("SELECT fighter_name, life, strength, agility, spirit, belt FROM users_dev JOIN profiles_dev ON users_dev.user_id = profiles_dev.user_id WHERE users_dev.user_id = %s", (callback.from_user.id,))
             result = cursor.fetchone()
             if result:
                 name, life, strength, agility, spirit, belt = result
