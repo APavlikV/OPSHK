@@ -165,4 +165,64 @@ def setup_handlers(dp: Dispatcher):
             await state.update_data(step=step+1, score=score)
             control, attack = sequence[step]
             await callback.message.answer(
-                f"<code>
+                f"<code>⚔️ Схватка {step+1} из 10</code>\n"
+                f"🎯 Контроль: {control}\n"
+                f"💥 Атака: {attack}\n"
+                f"Выбери защиту:",
+                parse_mode="HTML",
+                reply_markup=get_fight_keyboard()
+            )
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data == "hint")
+    async def show_hint(callback: CallbackQuery, state: FSMContext):
+        fight_data = await state.get_data()
+        step = fight_data.get("step", 1)
+        sequence = fight_data.get("fight_sequence", MOVES)
+        control, attack = sequence[step-1]
+        correct_defenses = [
+            d for d, v in DEFENSE_MOVES.items()
+            if control in v.get("control_defense", []) and attack in v.get("attack_defense", [])
+        ]
+        await callback.message.answer(
+            f"💡 Подсказка: {', '.join(correct_defenses) or 'нет защиты'}",
+            parse_mode="HTML"
+        )
+        await callback.answer()
+
+    @dp.callback_query(F.data == "show_profile")
+    async def show_profile(callback: CallbackQuery):
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT fighter_name, life, strength, agility, spirit, belt FROM users_dev JOIN profiles_dev ON users_dev.user_id = profiles_dev.user_id WHERE users_dev.user_id = %s", (callback.from_user.id,))
+            result = cursor.fetchone()
+            if result:
+                name, life, strength, agility, spirit, belt = result
+                await callback.message.edit_text(
+                    f"📊 <b>Твой профиль</b>\n"
+                    f"Имя: {name}\n"
+                    f"Жизнь: {life} ❤️\n"
+                    f"Сила: {strength} 💪\n"
+                    f"Ловкость: {agility} 🌀\n"
+                    f"Дух: {spirit} ✨\n"
+                    f"Пояс: {belt} 🟡",
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.message.edit_text("Профиль не найден!")
+        except Exception as e:
+            logger.error(f"Profile fetch failed: {e}")
+            await callback.message.edit_text(f"Ошибка: {e}")
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+        await callback.answer()
+
+    @dp.callback_query()
+    async def debug_callback(callback: CallbackQuery):
+        logger.info(f"Received callback: {callback.data} from {callback.from_user.id}")
+        await callback.answer()
