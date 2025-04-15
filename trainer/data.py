@@ -76,19 +76,19 @@ def init_db():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
+            CREATE TABLE IF NOT EXISTS users_dev (
                 user_id BIGINT PRIMARY KEY,
                 fighter_name TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS fights (
+            CREATE TABLE IF NOT EXISTS fights_dev (
                 id SERIAL PRIMARY KEY,
                 user_id BIGINT,
                 fight_type VARCHAR(20),
                 score INT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS profiles (
+            CREATE TABLE IF NOT EXISTS profiles_dev (
                 user_id BIGINT PRIMARY KEY,
                 life INT DEFAULT 100,
                 strength INT DEFAULT 10,
@@ -98,9 +98,9 @@ def init_db():
             );
         """)
         conn.commit()
-        logger.info("Database initialized successfully")
+        logger.info("Test database initialized successfully")
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        logger.error(f"Test database initialization failed: {e}")
         raise
     finally:
         if conn:
@@ -113,20 +113,20 @@ def save_fighter(user_id: int, fighter_name: str):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO users (user_id, fighter_name)
+            INSERT INTO users_dev (user_id, fighter_name)
             VALUES (%s, %s)
             ON CONFLICT (user_id) DO UPDATE
             SET fighter_name = EXCLUDED.fighter_name;
         """, (user_id, fighter_name))
         cursor.execute("""
-            INSERT INTO profiles (user_id)
+            INSERT INTO profiles_dev (user_id)
             VALUES (%s)
             ON CONFLICT (user_id) DO NOTHING;
         """, (user_id,))
         conn.commit()
-        logger.info(f"Saved fighter: {user_id}, {fighter_name}")
+        logger.info(f"Saved fighter (dev): {user_id}, {fighter_name}")
     except Exception as e:
-        logger.error(f"Save fighter failed: {e}")
+        logger.error(f"Save fighter (dev) failed: {e}")
         raise
     finally:
         if conn:
@@ -139,13 +139,13 @@ def save_fight(user_id: int, fight_type: str, score: int):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO fights (user_id, fight_type, score)
+            INSERT INTO fights_dev (user_id, fight_type, score)
             VALUES (%s, %s, %s);
         """, (user_id, fight_type, score))
         conn.commit()
-        logger.info(f"Saved fight: {user_id}, {fight_type}, {score}")
+        logger.info(f"Saved fight (dev): {user_id}, {fight_type}, {score}")
     except Exception as e:
-        logger.error(f"Save fight failed: {e}")
+        logger.error(f"Save fight (dev) failed: {e}")
         raise
     finally:
         if conn:
