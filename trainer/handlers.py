@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from .keyboards import get_nickname_keyboard
-from .texts import PROFILE_TEXT, RULES_TEXT, TIPS_TEXT
+from .texts import RULES_TEXT, TIPS_TEXT
 from .state import FightState
 from .data import save_fighter, save_fight, get_db_connection, DEFENSE_MOVES, MOVES
 from .game_logic import check_defense
@@ -289,7 +289,7 @@ def setup_handlers(dp: Dispatcher):
         if step >= 10:
             user_id = callback.from_user.id
             save_fight(user_id, "simple", score)
-            await	callback.message.answer(
+            await callback.message.answer(
                 f"🏆 <b>Бой завершён!</b>\n\n"
                 f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
                 parse_mode="HTML"
