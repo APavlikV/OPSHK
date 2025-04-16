@@ -11,13 +11,15 @@ from .texts import (
     ATTACK_SUCCESS_PHRASES, ATTACK_FAIL_PHRASES,
     DEFENSE_CONTROL_SUCCESS_PHRASES, DEFENSE_CONTROL_FAIL_PHRASES,
     DEFENSE_ATTACK_SUCCESS_PHRASES, DEFENSE_ATTACK_FAIL_PHRASES,
-    KIKEN_PHRASES, DRAW_PHRASES
+    DRAW_PHRASES
 )
 from .state import FightState
 from .data import save_fighter, save_fight, get_db_connection, DEFENSE_MOVES, MOVES
 from .game_logic import check_defense
 
 logger = logging.getLogger(__name__)
+
+BOT_NAMES = ["Бот Вася", "Бот Сэнсэй", "Бот Каратист", "Бот Татами", "Бот Кимоно"]
 
 def get_fight_keyboard(show_hint=False, control=None, attack=None) -> InlineKeyboardMarkup:
     buttons = [
@@ -241,11 +243,12 @@ def setup_handlers(dp: Dispatcher):
         fight_data = await state.get_data()
         control, attack = fight_data["fight_sequence"][0]
         start_phrase = random.choice(START_FIGHT_PHRASES)
-        await callback.message.answer(
+        await callback.message.edit_text(
+            f"<b>Бой начался!</b>\n"
             f"🥋 {start_phrase}",
             parse_mode="HTML"
         )
-        await callback.message.edit_text(
+        await callback.message.answer(
             f"⚔️ <code>Схватка 1 из 10</code>\n\n"
             f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
             f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
@@ -285,52 +288,37 @@ def setup_handlers(dp: Dispatcher):
         conn.close()
 
         # Логика логов
+        bot_nick = random.choice(BOT_NAMES)
         control_success = control in DEFENSE_MOVES.get(defense, {}).get("control_defense", [])
         attack_success = attack in DEFENSE_MOVES.get(defense, {}).get("attack_defense", [])
 
         # Контроль
         target_map = {"ДЗ": "голову", "ТР": "грудь", "СС": "живот"}
         control_phrase = random.choice(
-            CONTROL_SUCCESS_PHRASES[control]
-            if control_success
-            else CONTROL_FAIL_PHRASES[control]
+            CONTROL_FAIL_PHRASES[control] if control_success else CONTROL_SUCCESS_PHRASES[control]
+        ).format(nick=bot_nick, target=target_map.get(control, control))
+
+        # Защита контроля
+        defense_control_phrase = random.choice(
+            DEFENSE_CONTROL_SUCCESS_PHRASES[control] if control_success else DEFENSE_CONTROL_FAIL_PHRASES[control]
         ).format(nick=user_nick, target=target_map.get(control, control))
 
         # Атака
         attack_target_map = {"ДЗ": "лоб", "ТР": "грудь", "СС": "живот", "ГДН": "ноги"}
         attack_phrase = random.choice(
-            ATTACK_SUCCESS_PHRASES[attack]
-            if attack_success
-            else ATTACK_FAIL_PHRASES[attack]
-        ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
-
-        # Защита контроля
-        defense_control_phrase = random.choice(
-            DEFENSE_CONTROL_SUCCESS_PHRASES[control]
-            if control_success
-            else DEFENSE_CONTROL_FAIL_PHRASES[control]
-        ).format(nick=user_nick, target=target_map.get(control, control))
+            ATTACK_FAIL_PHRASES[attack] if attack_success else ATTACK_SUCCESS_PHRASES[attack]
+        ).format(nick=bot_nick, target=attack_target_map.get(attack, attack))
 
         # Защита атаки
         defense_attack_phrase = random.choice(
-            DEFENSE_ATTACK_SUCCESS_PHRASES[attack]
-            if attack_success
-            else DEFENSE_ATTACK_FAIL_PHRASES[attack]
+            DEFENSE_ATTACK_SUCCESS_PHRASES[attack] if attack_success else DEFENSE_ATTACK_FAIL_PHRASES[attack]
         ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
 
-        # Кикен (если защита успешна)
-        kiken_phrase = ""
-        if control_success and attack_success:
-            kiken_phrase = random.choice(KIKEN_PHRASES[attack]).format(
-                nick=user_nick, target=attack_target_map.get(attack, attack)
-            )
-
         log_message = (
-            f"⚔️ {control_phrase} {'✅' if control_success else '❌'}\n"
-            f"💥 {attack_phrase} {'✅' if attack_success else '❌'}\n"
+            f"⚔️ {control_phrase} {'✅' if not control_success else '❌'}\n"
             f"🛡️ {defense_control_phrase} {'✅' if control_success else '❌'}\n"
-            f"🛡️ {defense_attack_phrase} {'✅' if attack_success else '❌'}\n"
-            f"{kiken_phrase}"
+            f"💥 {attack_phrase} {'✅' if not attack_success else '❌'}\n"
+            f"🛡️ {defense_attack_phrase} {'✅' if attack_success else '❌'}"
         ).strip()
 
         await callback.message.edit_text(
