@@ -173,8 +173,11 @@ def setup_handlers(dp: Dispatcher):
             await state.clear()
 
     @dp.callback_query(F.data == "fight_menu")
-    async def fight_menu(callback: CallbackQuery):
-        await callback.message.edit_text(
+    async def fight_menu(callback: CallbackQuery, state: FSMContext):
+        # Удаляем клавиатуру у предыдущего сообщения (статистики)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        # Отправляем новое сообщение
+        await callback.message.answer(
             "Выберите режим боя:",
             reply_markup=get_fight_modes_menu()
         )
@@ -360,7 +363,7 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML"
             )
             draw_phrase = random.choice(DRAW_PHRASES) if score == 0 else ""
-            await callback.message.answer(
+            stats_message = await callback.message.answer(
                 f"<code>Статистика боя</code>\n\n"
                 f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
                 f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
@@ -410,7 +413,10 @@ def setup_handlers(dp: Dispatcher):
         await callback.answer()
 
     @dp.callback_query(F.data == "show_profile")
-    async def show_profile(callback: CallbackQuery):
+    async def show_profile(callback: CallbackQuery, state: FSMContext):
+        # Удаляем клавиатуру у предыдущего сообщения (статистики)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        # Отправляем новое сообщение
         conn = None
         try:
             conn = get_db_connection()
@@ -424,7 +430,7 @@ def setup_handlers(dp: Dispatcher):
             result = cursor.fetchone()
             if result:
                 name, life, strength, agility, spirit, belt = result
-                await callback.message.edit_text(
+                await callback.message.answer(
                     f"📊 <b>Твой профиль</b>\n"
                     f"Имя: <b>{name}</b>\n"
                     f"Жизнь: <b>{life}</b> ❤️\n"
@@ -436,10 +442,10 @@ def setup_handlers(dp: Dispatcher):
                     reply_markup=get_profile_menu()
                 )
             else:
-                await callback.message.edit_text("Профиль не найден!")
+                await callback.message.answer("Профиль не найден!")
         except Exception as e:
             logger.error(f"Profile fetch failed: {e}")
-            await callback.message.edit_text(f"Ошибка: {e}")
+            await callback.message.answer(f"Ошибка: {e}")
         finally:
             if conn:
                 cursor.close()
