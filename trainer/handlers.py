@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from .keyboards import get_nickname_keyboard
-from .texts import RULES_TEXT, TIPS_TEXT
+from .texts import RULES_TEXT, TIPS_TEXT, ATTACK_PHRASES, BLOCK_PHRASES, FINAL_PHRASES
 from .state import FightState
 from .data import save_fighter, save_fight, get_db_connection, DEFENSE_MOVES, MOVES
 from .game_logic import check_defense
@@ -267,12 +267,15 @@ def setup_handlers(dp: Dispatcher):
         cursor.close()
         conn.close()
 
-        log_formatted = log.replace("Тори", f"<b>{user_nick}</b>").replace("Уке", f"<b>{user_nick}</b>")
+        # Вариативные фразы для лога
+        attack_phrase = random.choice(ATTACK_PHRASES).format(nick=user_nick, target=control.lower(), code=control)
+        block_phrase = random.choice(BLOCK_PHRASES).format(nick=user_nick, defense=defense)
+        final_phrase = random.choice(FINAL_PHRASES).format(nick=user_nick, target=attack)
+
         log_message = (
-            f"⚔️ <b>{user_nick}</b> метит в {control.lower()} (<b>{control}</b>) ❌, "
-            f"бьёт в {attack.lower()} (<b>{attack}</b>) ❌\n"
-            f"🛡️ <b>{user_nick}</b> блокирует <b>{defense}</b>! ✅\n"
-            f"💥 ВЖУХ! <b>{user_nick}</b> добивает в <b>{attack}</b>!"
+            f"⚔️ {attack_phrase} ❌\n"
+            f"🛡️ {block_phrase} ✅\n"
+            f"💥 {final_phrase} 🏆"
         )
 
         await callback.message.edit_text(
@@ -281,8 +284,7 @@ def setup_handlers(dp: Dispatcher):
             f"💥 <i>Атака</i>: <b>{attack}</b>\n"
             f"🛡️ <i>Защита</i>: <b>{defense}</b>\n\n"
             f"<i>Результат</i>: <b>{result}</b> (<b>+{points} баллов</b>)",
-            parse_mode="HTML",
-            reply_markup=get_fight_keyboard()
+            parse_mode="HTML"
         )
         await callback.message.answer(log_message, parse_mode="HTML")
 
