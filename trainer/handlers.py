@@ -26,8 +26,14 @@ def get_fight_keyboard(show_hint=False, control=None, attack=None) -> InlineKeyb
 def get_main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Бой 🥊", callback_data="fight_menu")],
-        [InlineKeyboardButton(text="Профиль 📊", callback_data="show_profile")],
-        [InlineKeyboardButton(text="Сменить Ник", callback_data="custom_nick")]
+        [InlineKeyboardButton(text="Профиль 📊", callback_data="show_profile")]
+    ])
+
+def get_profile_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Бой 🥊", callback_data="fight_menu")],
+        [InlineKeyboardButton(text="Сменить ник", callback_data="custom_nick")],
+        [InlineKeyboardButton(text="Назад", callback_data="back_to_main")]
     ])
 
 def get_fight_modes_menu() -> InlineKeyboardMarkup:
@@ -39,13 +45,16 @@ def get_fight_modes_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Назад", callback_data="back_to_main")]
     ])
 
-def get_simple_fight_menu() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
+    buttons = [
         [InlineKeyboardButton(text="Правила", callback_data="show_rules")],
         [InlineKeyboardButton(text="Памятка", callback_data="show_tips")],
         [InlineKeyboardButton(text="Начать бой", callback_data="start_simple_fight")],
         [InlineKeyboardButton(text="Назад", callback_data="back_to_fight_modes")]
-    ])
+    ]
+    if exclude:
+        buttons = [b for b in buttons if b[0].text != exclude]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def setup_handlers(dp: Dispatcher):
     @dp.message(Command("start", "menu"))
@@ -82,7 +91,7 @@ def setup_handlers(dp: Dispatcher):
                     f"Дух: <b>{spirit}</b> ✨\n"
                     f"Пояс: <b>{belt}</b> 🟡",
                     parse_mode="HTML",
-                    reply_markup=get_main_menu()
+                    reply_markup=get_profile_menu()
                 )
             else:
                 await message.answer("Профиль не найден!")
@@ -155,9 +164,7 @@ def setup_handlers(dp: Dispatcher):
         await callback.message.edit_text(
             RULES_TEXT,
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Назад", callback_data="simple_fight_menu")]
-            ])
+            reply_markup=get_simple_fight_menu(exclude="Правила")
         )
         await callback.answer()
 
@@ -166,9 +173,7 @@ def setup_handlers(dp: Dispatcher):
         await callback.message.edit_text(
             TIPS_TEXT,
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Назад", callback_data="simple_fight_menu")]
-            ])
+            reply_markup=get_simple_fight_menu(exclude="Памятка")
         )
         await callback.answer()
 
@@ -267,7 +272,6 @@ def setup_handlers(dp: Dispatcher):
         cursor.close()
         conn.close()
 
-        # Вариативные фразы для лога
         attack_phrase = random.choice(ATTACK_PHRASES).format(nick=user_nick, target=control.lower(), code=control)
         block_phrase = random.choice(BLOCK_PHRASES).format(nick=user_nick, defense=defense)
         final_phrase = random.choice(FINAL_PHRASES).format(nick=user_nick, target=attack)
@@ -368,7 +372,7 @@ def setup_handlers(dp: Dispatcher):
                     f"Дух: <b>{spirit}</b> ✨\n"
                     f"Пояс: <b>{belt}</b> 🟡",
                     parse_mode="HTML",
-                    reply_markup=get_main_menu()
+                    reply_markup=get_profile_menu()
                 )
             else:
                 await callback.message.edit_text("Профиль не найден!")
