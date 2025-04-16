@@ -1,11 +1,13 @@
 services:
   - type: web
-    name: opshk-bot
+    name: opshk-bot-dev
     env: python
+    repo: https://github.com/APavlikV/OPSHK
+    branch: dev
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python trainer/main.py
+    startCommand: python main.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -14,7 +16,7 @@ services:
       - key: RENDER_API_KEY
         sync: false
       - key: PORT
-        value: 10000
+        value: 10001
       - key: DB_HOST
         value: pg-456.oregon-postgres.render.com
       - key: DB_NAME
@@ -27,13 +29,3 @@ services:
         value: red-cvud.oregon-redis.render.com
       - key: REDIS_PORT
         value: 6379
-databases:
-  - name: opshk-db
-    databaseName: opshk
-    user: opshk_user
-    plan: free
-    region: oregon
-  - name: opshk-redis
-    plan: free
-    region: oregon
-    maxmemoryPolicy: noeviction
