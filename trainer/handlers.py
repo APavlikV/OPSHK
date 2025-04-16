@@ -5,7 +5,14 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from .keyboards import get_nickname_keyboard
-from .texts import RULES_TEXT, TIPS_TEXT, ATTACK_PHRASES, BLOCK_PHRASES, FINAL_PHRASES
+from .texts import (
+    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES,
+    CONTROL_SUCCESS_PHRASES, CONTROL_FAIL_PHRASES,
+    ATTACK_SUCCESS_PHRASES, ATTACK_FAIL_PHRASES,
+    DEFENSE_CONTROL_SUCCESS_PHRASES, DEFENSE_CONTROL_FAIL_PHRASES,
+    DEFENSE_ATTACK_SUCCESS_PHRASES, DEFENSE_ATTACK_FAIL_PHRASES,
+    KIKEN_PHRASES, DRAW_PHRASES
+)
 from .state import FightState
 from .data import save_fighter, save_fight, get_db_connection, DEFENSE_MOVES, MOVES
 from .game_logic import check_defense
@@ -233,6 +240,11 @@ def setup_handlers(dp: Dispatcher):
         )
         fight_data = await state.get_data()
         control, attack = fight_data["fight_sequence"][0]
+        start_phrase = random.choice(START_FIGHT_PHRASES)
+        await callback.message.answer(
+            f"🥋 {start_phrase}",
+            parse_mode="HTML"
+        )
         await callback.message.edit_text(
             f"⚔️ <code>Схватка 1 из 10</code>\n\n"
             f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
@@ -272,15 +284,54 @@ def setup_handlers(dp: Dispatcher):
         cursor.close()
         conn.close()
 
-        attack_phrase = random.choice(ATTACK_PHRASES).format(nick=user_nick, target=control.lower(), code=control)
-        block_phrase = random.choice(BLOCK_PHRASES).format(nick=user_nick, defense=defense)
-        final_phrase = random.choice(FINAL_PHRASES).format(nick=user_nick, target=attack)
+        # Логика логов
+        control_success = control in DEFENSE_MOVES.get(defense, {}).get("control_defense", [])
+        attack_success = attack in DEFENSE_MOVES.get(defense, {}).get("attack_defense", [])
+
+        # Контроль
+        target_map = {"ДЗ": "голову", "ТР": "грудь", "СС": "живот"}
+        control_phrase = random.choice(
+            CONTROL_SUCCESS_PHRASES[control]
+            if control_success
+            else CONTROL_FAIL_PHRASES[control]
+        ).format(nick=user_nick, target=target_map.get(control, control))
+
+        # Атака
+        attack_target_map = {"ДЗ": "лоб", "ТР": "грудь", "СС": "живот", "ГДН": "ноги"}
+        attack_phrase = random.choice(
+            ATTACK_SUCCESS_PHRASES[attack]
+            if attack_success
+            else ATTACK_FAIL_PHRASES[attack]
+        ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
+
+        # Защита контроля
+        defense_control_phrase = random.choice(
+            DEFENSE_CONTROL_SUCCESS_PHRASES[control]
+            if control_success
+            else DEFENSE_CONTROL_FAIL_PHRASES[control]
+        ).format(nick=user_nick, target=target_map.get(control, control))
+
+        # Защита атаки
+        defense_attack_phrase = random.choice(
+            DEFENSE_ATTACK_SUCCESS_PHRASES[attack]
+            if attack_success
+            else DEFENSE_ATTACK_FAIL_PHRASES[attack]
+        ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
+
+        # Кикен (если защита успешна)
+        kiken_phrase = ""
+        if control_success and attack_success:
+            kiken_phrase = random.choice(KIKEN_PHRASES[attack]).format(
+                nick=user_nick, target=attack_target_map.get(attack, attack)
+            )
 
         log_message = (
-            f"⚔️ {attack_phrase} ❌\n"
-            f"🛡️ {block_phrase} ✅\n"
-            f"💥 {final_phrase} 🏆"
-        )
+            f"⚔️ {control_phrase} {'✅' if control_success else '❌'}\n"
+            f"💥 {attack_phrase} {'✅' if attack_success else '❌'}\n"
+            f"🛡️ {defense_control_phrase} {'✅' if control_success else '❌'}\n"
+            f"🛡️ {defense_attack_phrase} {'✅' if attack_success else '❌'}\n"
+            f"{kiken_phrase}"
+        ).strip()
 
         await callback.message.edit_text(
             f"⚔️ <code>Схватка {step} из 10</code>\n\n"
@@ -300,12 +351,14 @@ def setup_handlers(dp: Dispatcher):
                 f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
                 parse_mode="HTML"
             )
+            draw_phrase = random.choice(DRAW_PHRASES) if score == 0 else ""
             await callback.message.answer(
                 f"<code>Статистика боя</code>\n\n"
                 f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
                 f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
                 f"<i>Поражение</i>: <b>{stats['losses']}</b>\n"
-                f"<i>Подсказок</i>: <b>{stats['hints']}</b>",
+                f"<i>Подсказок</i>: <b>{stats['hints']}</b>\n\n"
+                f"{draw_phrase}",
                 parse_mode="HTML",
                 reply_markup=get_main_menu()
             )
