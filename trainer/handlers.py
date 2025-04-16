@@ -19,7 +19,10 @@ from .game_logic import check_defense
 
 logger = logging.getLogger(__name__)
 
-BOT_NAMES = ["Бот Вася", "Бот Сэнсэй", "Бот Каратист", "Бот Татами", "Бот Кимоно"]
+def get_start_button() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Старт", callback_data="start_button")]
+    ])
 
 def get_fight_keyboard(show_hint=False, control=None, attack=None) -> InlineKeyboardMarkup:
     buttons = [
@@ -66,14 +69,31 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def setup_handlers(dp: Dispatcher):
-    @dp.message(Command("start", "menu"))
+    @dp.message(Command("start"))
     async def cmd_start(message: Message):
-        username = message.from_user.username or "PAndrew"
         await message.answer(
+            f"🥋 <b>Добро пожаловать в КАРАТЭ тренажер!</b>\n"
+            f"Нажми, чтобы начать:",
+            parse_mode="HTML",
+            reply_markup=get_start_button()
+        )
+
+    @dp.callback_query(F.data == "start_button")
+    async def start_button(callback: CallbackQuery, state: FSMContext):
+        username = callback.from_user.username or "Fighter"
+        await callback.message.edit_text(
             f"🥋 <b>Добро пожаловать в КАРАТЭ тренажер!</b>\n"
             f"Использовать ваш <b>ник Telegram ({username})</b> или <b>выбрать свой</b>?",
             parse_mode="HTML",
             reply_markup=get_nickname_keyboard()
+        )
+        await callback.answer()
+
+    @dp.message(Command("menu"))
+    async def cmd_menu(message: Message):
+        await message.answer(
+            "Главное меню:",
+            reply_markup=get_main_menu()
         )
 
     @dp.message(Command("profile"))
@@ -288,7 +308,7 @@ def setup_handlers(dp: Dispatcher):
         conn.close()
 
         # Логика логов
-        bot_nick = random.choice(BOT_NAMES)
+        bot_nick = "Бот Вася"
         control_success = control in DEFENSE_MOVES.get(defense, {}).get("control_defense", [])
         attack_success = attack in DEFENSE_MOVES.get(defense, {}).get("attack_defense", [])
 
