@@ -7,12 +7,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from .keyboards import get_nickname_keyboard
 from .texts import (
-    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES, TIMED_FIGHT_START_PHRASES, TIMED_FIGHT_END_PHRASES, TIMED_FIGHT_TIMEOUT_PHRASE, TIMED_FIGHT_TICK_PHRASES,
-    CONTROL_SUCCESS_PHRASES, CONTROL_FAIL_PHRASES,
-    ATTACK_SUCCESS_PHRASES, ATTACK_FAIL_PHRASES,
-    DEFENSE_CONTROL_SUCCESS_PHRASES, DEFENSE_CONTROL_FAIL_PHRASES,
-    DEFENSE_ATTACK_SUCCESS_PHRASES, DEFENSE_ATTACK_FAIL_PHRASES,
-    DRAW_PHRASES
+    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES, TIMED_FIGHT_START_PHRASES, TIMED_FIGHT_END_PHRASES,
+    TIMED_FIGHT_TIMEOUT_PHRASE, TIMED_FIGHT_TICK_PHRASES, CONTROL_SUCCESS_PHRASES, CONTROL_FAIL_PHRASES,
+    ATTACK_SUCCESS_PHRASES, ATTACK_FAIL_PHRASES, DEFENSE_CONTROL_SUCCESS_PHRASES, DEFENSE_CONTROL_FAIL_PHRASES,
+    DEFENSE_ATTACK_SUCCESS_PHRASES, DEFENSE_ATTACK_FAIL_PHRASES, DRAW_PHRASES
 )
 from .state import FightState
 from .data import save_fighter, save_fight, get_db_connection, DEFENSE_MOVES, MOVES
@@ -21,9 +19,7 @@ from .game_logic import check_defense
 logger = logging.getLogger(__name__)
 
 def get_start_button() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Старт", callback_data="start_button")]
-    ])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Старт", callback_data="start_button")]])
 
 def get_fight_keyboard(is_timed=False) -> InlineKeyboardMarkup:
     buttons = [
@@ -69,24 +65,23 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
         buttons = [b for b in buttons if b[0].text != exclude]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-async def clear_keyboard(bot, chat_id, message_id):
-    for _ in range(2):  # Две попытки
+async def clear_keyboard(bot, chat_id, message_id, fight_id):
+    for _ in range(2):
         try:
-            await bot.edit_message_reply_markup(
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=None
-            )
+            await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
+            logger.info(f"Fight {fight_id}: Cleared keyboard for message {message_id}")
             return True
         except Exception as e:
-            logger.warning(f"Failed to clear keyboard for message {message_id}: {e}")
+            logger.warning(f"Fight {fight_id}: Failed to clear keyboard for message {message_id}: {e}")
             await asyncio.sleep(0.5)
+    logger.error(f"Fight {fight_id}: Failed to clear keyboard for message {message_id} after retries")
     return False
 
-async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int, fight_message: Message):
+async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int, fight_message: Message, fight_id: str):
     for seconds in range(4, -1, -1):
         user_data = await context.get_data()
         if user_data.get("fight_type") != "timed" or user_data.get("step") != step or not user_data.get("is_fighting"):
+            logger.info(f"Fight {fight_id}: Timer stopped for step {step}")
             return
         tick_phrase = random.choice(TIMED_FIGHT_TICK_PHRASES).format(seconds=seconds)
         await fight_message.edit_text(
@@ -106,43 +101,38 @@ async def timed_fight_timer(context: FSMContext, message: Message, user_id: int,
         stats["losses"] += 1
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT fighter_name FROM users_dev WHERE user_id = %s",
-            (user_id,)
-        )
+        cursor.execute("SELECT fighter_name FROM users_dev WHERE user_id = %s", (user_id,))
         user_nick = cursor.fetchone()[0]
         cursor.close()
         conn.close()
         save_fight(user_id, "timed", score)
-        await clear_keyboard(message.bot, message.chat.id, fight_message.message_id)
-        await message.answer(
-            TIMED_FIGHT_TIMEOUT_PHRASE,
-            parse_mode="HTML"
-        )
-        end_phrase = random.choice(TIMED_FIGHT_END_PHRASES)
-        await message.answer(
-            f"🏆 <b>Бой на время завершён!</b>\n"
-            f"🥋 {end_phrase}\n"
-            f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
-            parse_mode="HTML"
-        )
-        await message.answer(
-            f"<code>Статистика боя</code>\n\n"
-            f"<i>Схваток</i>: <b>{step}</b>\n"
-            f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
-            f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
-            f"<i>Поражение</i>: <b>{stats['losses']}</b>",
-            parse_mode="HTML",
-            reply_markup=get_main_menu()
-        )
+        if await clear_keyboard(message.bot, message.chat.id, fight_message.message_id, fight_id):
+            await message.answer(TIMED_FIGHT_TIMEOUT_PHRASE, parse_mode="HTML")
+            end_phrase = random.choice(TIMED_FIGHT_END_PHRASES)
+            await message.answer(
+                f"🏆 <b>Бой на время завершён!</b>\n"
+                f"🥋 {end_phrase}\n"
+                f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
+                parse_mode="HTML"
+            )
+            await message.answer(
+                f"<code>Статистика боя</code>\n\n"
+                f"<i>Схваток</i>: <b>{step}</b>\n"
+                f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+                f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+                f"<i>Поражение</i>: <b>{stats['losses']}</b>",
+                parse_mode="HTML",
+                reply_markup=get_main_menu()
+            )
+        else:
+            await message.answer("Ошибка: не удалось завершить бой корректно.", reply_markup=get_main_menu())
         await context.clear()
 
 def setup_handlers(dp: Dispatcher):
     @dp.message(Command("start"))
     async def cmd_start(message: Message):
         await message.answer(
-            f"🥋 <b>Добро пожаловать в КАРАТЭ тренажер!</b>\n"
-            f"Нажми, чтобы начать:",
+            f"🥋 <b>Добро пожаловать в КАРАТЭ тренажер!</b>\nНажми, чтобы начать:",
             parse_mode="HTML",
             reply_markup=get_start_button()
         )
@@ -160,10 +150,7 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.message(Command("menu"))
     async def cmd_menu(message: Message):
-        await message.answer(
-            "Главное меню:",
-            reply_markup=get_main_menu()
-        )
+        await message.answer("Главное меню:", reply_markup=get_main_menu())
 
     @dp.message(Command("profile"))
     async def cmd_profile(message: Message):
@@ -182,12 +169,8 @@ def setup_handlers(dp: Dispatcher):
                 name, life, strength, agility, spirit, belt = result
                 await message.answer(
                     f"📊 <b>Твой профиль</b>\n"
-                    f"Имя: <b>{name}</b>\n"
-                    f"Жизнь: <b>{life}</b> ❤️\n"
-                    f"Сила: <b>{strength}</b> 💪\n"
-                    f"Ловкость: <b>{agility}</b> 🌀\n"
-                    f"Дух: <b>{spirit}</b> ✨\n"
-                    f"Пояс: <b>{belt}</b> 🟡",
+                    f"Имя: <b>{name}</b>\nЖизнь: <b>{life}</b> ❤️\nСила: <b>{strength}</b> 💪\n"
+                    f"Ловкость: <b>{agility}</b> 🌀\nДух: <b>{spirit}</b> ✨\nПояс: <b>{belt}</b> 🟡",
                     parse_mode="HTML",
                     reply_markup=get_profile_menu()
                 )
@@ -243,55 +226,43 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data == "fight_menu")
     async def fight_menu(callback: CallbackQuery, state: FSMContext):
-        await callback.message.edit_text(
-            "Выберите режим боя:",
-            reply_markup=get_fight_modes_menu()
-        )
+        await callback.message.edit_text("Выберите режим боя:", reply_markup=get_fight_modes_menu())
         await callback.answer()
 
     @dp.callback_query(F.data == "simple_fight_menu")
     async def simple_fight_menu(callback: CallbackQuery):
-        await callback.message.edit_text(
-            "Готовы начать простой бой!?",
-            reply_markup=get_simple_fight_menu()
-        )
+        await callback.message.edit_text("Готовы начать простой бой!?", reply_markup=get_simple_fight_menu())
         await callback.answer()
 
     @dp.callback_query(F.data == "show_rules")
     async def show_rules(callback: CallbackQuery):
-        await callback.message.edit_text(
-            RULES_TEXT,
-            parse_mode="HTML",
-            reply_markup=get_simple_fight_menu(exclude="Правила")
-        )
+        await callback.message.edit_text(RULES_TEXT, parse_mode="HTML", reply_markup=get_simple_fight_menu(exclude="Правила"))
         await callback.answer()
 
     @dp.callback_query(F.data == "show_tips")
     async def show_tips(callback: CallbackQuery):
-        await callback.message.edit_text(
-            TIPS_TEXT,
-            parse_mode="HTML",
-            reply_markup=get_simple_fight_menu(exclude="Памятка")
-        )
+        await callback.message.edit_text(TIPS_TEXT, parse_mode="HTML", reply_markup=get_simple_fight_menu(exclude="Памятка"))
         await callback.answer()
 
     @dp.callback_query(F.data == "timed_fight")
     async def timed_fight(callback: CallbackQuery, state: FSMContext):
         user_id = callback.from_user.id
+        fight_id = f"{user_id}_{random.randint(1000, 9999)}"
         await state.update_data(
             fight_type="timed",
             is_fighting=True,
+            is_processing=False,
             user_id=user_id,
             step=1,
             score=0,
             stats={"wins": 0, "partial": 0, "losses": 0},
             fight_sequence=random.sample(MOVES, 10),
-            last_fight_message_id=None
+            last_fight_message_id=None,
+            fight_id=fight_id
         )
         start_phrase = random.choice(TIMED_FIGHT_START_PHRASES)
         await callback.message.edit_text(
-            f"<b>Бой на время начался!</b>\n"
-            f"🥋 {start_phrase}",
+            f"<b>Бой на время начался!</b>\n🥋 {start_phrase}",
             parse_mode="HTML"
         )
         fight_data = await state.get_data()
@@ -306,16 +277,14 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_fight_keyboard(is_timed=True)
         )
         await state.update_data(last_fight_message_id=fight_message.message_id)
-        asyncio.create_task(timed_fight_timer(state, callback.message, user_id, 1, fight_message))
+        asyncio.create_task(timed_fight_timer(state, callback.message, user_id, 1, fight_message, fight_id))
         await callback.answer()
 
     @dp.callback_query(F.data == "pvp_bot")
     async def pvp_bot(callback: CallbackQuery):
         await callback.message.edit_text(
             "PvP с ботом пока в разработке! Скоро будет доступен.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Назад", callback_data="fight_menu")]
-            ])
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="fight_menu")]])
         )
         await callback.answer()
 
@@ -323,44 +292,38 @@ def setup_handlers(dp: Dispatcher):
     async def pvp_arena(callback: CallbackQuery):
         await callback.message.edit_text(
             "PvP Арена пока в разработке! Скоро будет доступна.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Назад", callback_data="fight_menu")]
-            ])
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="fight_menu")]])
         )
         await callback.answer()
 
     @dp.callback_query(F.data == "back_to_main")
     async def back_to_main(callback: CallbackQuery):
-        await callback.message.edit_text(
-            "Главное меню:",
-            reply_markup=get_main_menu()
-        )
+        await callback.message.edit_text("Главное меню:", reply_markup=get_main_menu())
         await callback.answer()
 
     @dp.callback_query(F.data == "back_to_fight_modes")
     async def back_to_fight_modes(callback: CallbackQuery):
-        await callback.message.edit_text(
-            "Выберите режим боя:",
-            reply_markup=get_fight_modes_menu()
-        )
+        await callback.message.edit_text("Выберите режим боя:", reply_markup=get_fight_modes_menu())
         await callback.answer()
 
     @dp.callback_query(F.data == "start_simple_fight")
     async def start_simple_fight(callback: CallbackQuery, state: FSMContext):
+        fight_id = f"{callback.from_user.id}_{random.randint(1000, 9999)}"
         await state.update_data(
             fight_sequence=random.sample(MOVES, 10),
             fight_type="simple",
             step=1,
             score=0,
             stats={"wins": 0, "partial": 0, "losses": 0, "hints": 0},
-            last_fight_message_id=None
+            last_fight_message_id=None,
+            is_processing=False,
+            fight_id=fight_id
         )
         fight_data = await state.get_data()
         control, attack = fight_data["fight_sequence"][0]
         start_phrase = random.choice(START_FIGHT_PHRASES)
         await callback.message.edit_text(
-            f"<b>Бой начался!</b>\n"
-            f"🥋 {start_phrase}",
+            f"<b>Бой начался!</b>\n🥋 {start_phrase}",
             parse_mode="HTML"
         )
         fight_message = await callback.message.answer(
@@ -376,186 +339,206 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data.startswith("defense_"))
     async def process_defense(callback: CallbackQuery, state: FSMContext):
-        defense = callback.data.replace("defense_", "")
         fight_data = await state.get_data()
-        fight_type = fight_data.get("fight_type", "simple")
-        step = fight_data.get("step", 1)
-        score = fight_data.get("score", 0)
-        stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
-        is_fighting = fight_data.get("is_fighting", True)
-        last_fight_message_id = fight_data.get("last_fight_message_id")
-
-        if not is_fighting:
-            await callback.message.edit_text("Бой завершён!")
+        fight_id = fight_data.get("fight_id", "unknown")
+        if fight_data.get("is_processing"):
+            logger.info(f"Fight {fight_id}: Ignored duplicate callback from user {callback.from_user.id}")
             await callback.answer()
             return
+        await state.update_data(is_processing=True)
+        try:
+            defense = callback.data.replace("defense_", "")
+            fight_type = fight_data.get("fight_type", "simple")
+            step = fight_data.get("step", 1)
+            score = fight_data.get("score", 0)
+            stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
+            is_fighting = fight_data.get("is_fighting", True)
+            last_fight_message_id = fight_data.get("last_fight_message_id")
 
-        sequence = fight_data.get("fight_sequence", MOVES)
-        control, attack = sequence[step-1]
+            if not is_fighting:
+                await callback.message.edit_text("Бой завершён!")
+                await callback.answer()
+                return
 
-        points, result, correct_defenses, log = await check_defense(control, attack, defense)
-        score += points
-        if points == 3:
-            stats["wins"] += 1
-        elif points == 1:
-            stats["partial"] += 1
-        else:
-            stats["losses"] += 1
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT fighter_name FROM users_dev WHERE user_id = %s",
-            (callback.from_user.id,)
-        )
-        user_nick = cursor.fetchone()[0]
-        cursor.close()
-        conn.close()
-
-        bot_nick = "Бот Вася"
-        control_success = control in DEFENSE_MOVES.get(defense, {}).get("control_defense", [])
-        attack_success = attack in DEFENSE_MOVES.get(defense, {}).get("attack_defense", [])
-
-        target_map = {"ДЗ": "голову", "ТР": "грудь", "СС": "живот"}
-        control_phrase = random.choice(
-            CONTROL_FAIL_PHRASES[control] if control_success else CONTROL_SUCCESS_PHRASES[control]
-        ).format(nick=bot_nick, target=target_map.get(control, control))
-
-        defense_control_phrase = random.choice(
-            DEFENSE_CONTROL_SUCCESS_PHRASES[control] if control_success else DEFENSE_CONTROL_FAIL_PHRASES[control]
-        ).format(nick=user_nick, target=target_map.get(control, control))
-
-        attack_target_map = {"ДЗ": "лоб", "ТР": "грудь", "СС": "живот", "ГДН": "ноги"}
-        attack_phrase = random.choice(
-            ATTACK_FAIL_PHRASES[attack] if attack_success else ATTACK_SUCCESS_PHRASES[attack]
-        ).format(nick=bot_nick, target=attack_target_map.get(attack, attack))
-
-        defense_attack_phrase = random.choice(
-            DEFENSE_ATTACK_SUCCESS_PHRASES[attack] if attack_success else DEFENSE_ATTACK_FAIL_PHRASES[attack]
-        ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
-
-        log_message = (
-            f"⚔️ {control_phrase} {'✅' if not control_success else '❌'}\n"
-            f"🛡️ {defense_control_phrase} {'✅' if control_success else '❌'}\n"
-            f"💥 {attack_phrase} {'✅' if not attack_success else '❌'}\n"
-            f"🛡️ {defense_attack_phrase} {'✅' if attack_success else '❌'}"
-        ).strip()
-
-        await callback.message.edit_text(
-            f"⚔️ <code>Схватка {step}</code>\n\n"
-            f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
-            f"💥 <i>Атака</i>: <b>{attack}</b>\n"
-            f"🛡️ <i>Защита</i>: <b>{defense}</b>\n\n"
-            f"<i>Результат</i>: <b>{result}</b> (<b>+{points} баллов</b>)",
-            parse_mode="HTML"
-        )
-        await callback.message.answer(log_message, parse_mode="HTML")
-
-        # Очистка клавиатуры текущей схватки
-        if last_fight_message_id:
-            await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id)
-
-        if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
-            user_id = callback.from_user.id
-            save_fight(user_id, fight_type, score)
-            await callback.message.answer(
-                f"🏆 <b>Бой завершён!</b>\n\n"
-                f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
-                parse_mode="HTML"
-            )
-            draw_phrase = random.choice(DRAW_PHRASES) if score == 0 else ""
-            if fight_type == "simple":
-                await callback.message.answer(
-                    f"<code>Статистика боя</code>\n\n"
-                    f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
-                    f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
-                    f"<i>Поражение</i>: <b>{stats['losses']}</b>\n"
-                    f"<i>Подсказок</i>: <b>{stats['hints']}</b>\n\n"
-                    f"{draw_phrase}",
-                    parse_mode="HTML",
-                    reply_markup=get_main_menu()
-                )
-            else:
-                await callback.message.answer(
-                    f"<code>Статистика боя</code>\n\n"
-                    f"<i>Схваток</i>: <b>{step}</b>\n"
-                    f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
-                    f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
-                    f"<i>Поражение</i>: <b>{stats['losses']}</b>\n\n"
-                    f"{draw_phrase}",
-                    parse_mode="HTML",
-                    reply_markup=get_main_menu()
-                )
-            await state.clear()
-        elif fight_type == "timed":
-            step += 1
-            await state.update_data(step=step, score=score, stats=stats, is_fighting=True)
+            sequence = fight_data.get("fight_sequence", MOVES)
             control, attack = sequence[step-1]
-            await state.update_data(current_move=(control, attack))
-            fight_message = await callback.message.answer(
+
+            points, result, correct_defenses, log = await check_defense(control, attack, defense)
+            score += points
+            if points == 3:
+                stats["wins"] += 1
+            elif points == 1:
+                stats["partial"] += 1
+            else:
+                stats["losses"] += 1
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT fighter_name FROM users_dev WHERE user_id = %s", (callback.from_user.id,))
+            user_nick = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+
+            bot_nick = "Бот Вася"
+            control_success = control in DEFENSE_MOVES.get(defense, {}).get("control_defense", [])
+            attack_success = attack in DEFENSE_MOVES.get(defense, {}).get("attack_defense", [])
+
+            target_map = {"ДЗ": "голову", "ТР": "грудь", "СС": "живот"}
+            control_phrase = random.choice(
+                CONTROL_FAIL_PHRASES[control] if control_success else CONTROL_SUCCESS_PHRASES[control]
+            ).format(nick=bot_nick, target=target_map.get(control, control))
+
+            defense_control_phrase = random.choice(
+                DEFENSE_CONTROL_SUCCESS_PHRASES[control] if control_success else DEFENSE_CONTROL_FAIL_PHRASES[control]
+            ).format(nick=user_nick, target=target_map.get(control, control))
+
+            attack_target_map = {"ДЗ": "лоб", "ТР": "грудь", "СС": "живот", "ГДН": "ноги"}
+            attack_phrase = random.choice(
+                ATTACK_FAIL_PHRASES[attack] if attack_success else ATTACK_SUCCESS_PHRASES[attack]
+            ).format(nick=bot_nick, target=attack_target_map.get(attack, attack))
+
+            defense_attack_phrase = random.choice(
+                DEFENSE_ATTACK_SUCCESS_PHRASES[attack] if attack_success else DEFENSE_ATTACK_FAIL_PHRASES[attack]
+            ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
+
+            log_message = (
+                f"⚔️ {control_phrase} {'✅' if not control_success else '❌'}\n"
+                f"🛡️ {defense_control_phrase} {'✅' if control_success else '❌'}\n"
+                f"💥 {attack_phrase} {'✅' if not attack_success else '❌'}\n"
+                f"🛡️ {defense_attack_phrase} {'✅' if attack_success else '❌'}"
+            ).strip()
+
+            await callback.message.edit_text(
                 f"⚔️ <code>Схватка {step}</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
-                f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
-                f"Выбери защиту (5 сек):",
-                parse_mode="HTML",
-                reply_markup=get_fight_keyboard(is_timed=True)
+                f"💥 <i>Атака</i>: <b>{attack}</b>\n"
+                f"🛡️ <i>Защита</i>: <b>{defense}</b>\n\n"
+                f"<i>Результат</i>: <b>{result}</b> (<b>+{points} баллов</b>)",
+                parse_mode="HTML"
             )
-            await state.update_data(last_fight_message_id=fight_message.message_id)
-            asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step, fight_message))
-        else:
-            step += 1
-            await state.update_data(step=step, score=score, stats=stats)
-            control, attack = sequence[step-1]
-            fight_message = await callback.message.answer(
-                f"⚔️ <code>Схватка {step} из 10</code>\n\n"
-                f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
-                f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
-                f"Выбери защиту:",
-                parse_mode="HTML",
-                reply_markup=get_fight_keyboard()
-            )
-            await state.update_data(last_fight_message_id=fight_message.message_id)
+            await callback.message.answer(log_message, parse_mode="HTML")
 
+            # Очистка клавиатуры текущей схватки
+            if last_fight_message_id:
+                if not await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id):
+                    logger.error(f"Fight {fight_id}: Failed to proceed due to keyboard cleanup error")
+                    await callback.message.answer("Ошибка: не удалось очистить клавиатуру.", reply_markup=get_main_menu())
+                    await state.clear()
+                    await callback.answer()
+                    return
+
+            if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
+                user_id = callback.from_user.id
+                save_fight(user_id, fight_type, score)
+                await callback.message.answer(
+                    f"🏆 <b>Бой завершён!</b>\n\n"
+                    f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
+                    parse_mode="HTML"
+                )
+                draw_phrase = random.choice(DRAW_PHRASES) if score == 0 else ""
+                if fight_type == "simple":
+                    await callback.message.answer(
+                        f"<code>Статистика боя</code>\n\n"
+                        f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+                        f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+                        f"<i>Поражение</i>: <b>{stats['losses']}</b>\n"
+                        f"<i>Подсказок</i>: <b>{stats['hints']}</b>\n\n"
+                        f"{draw_phrase}",
+                        parse_mode="HTML",
+                        reply_markup=get_main_menu()
+                    )
+                else:
+                    await callback.message.answer(
+                        f"<code>Статистика боя</code>\n\n"
+                        f"<i>Схваток</i>: <b>{step}</b>\n"
+                        f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+                        f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+                        f"<i>Поражение</i>: <b>{stats['losses']}</b>\n\n"
+                        f"{draw_phrase}",
+                        parse_mode="HTML",
+                        reply_markup=get_main_menu()
+                    )
+                await state.clear()
+            elif fight_type == "timed":
+                step += 1
+                await state.update_data(step=step, score=score, stats=stats, is_fighting=True)
+                control, attack = sequence[step-1]
+                await state.update_data(current_move=(control, attack))
+                fight_message = await callback.message.answer(
+                    f"⚔️ <code>Схватка {step}</code>\n\n"
+                    f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+                    f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
+                    f"Выбери защиту (5 сек):",
+                    parse_mode="HTML",
+                    reply_markup=get_fight_keyboard(is_timed=True)
+                )
+                await state.update_data(last_fight_message_id=fight_message.message_id)
+                asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step, fight_message, fight_id))
+            else:
+                step += 1
+                await state.update_data(step=step, score=score, stats=stats)
+                control, attack = sequence[step-1]
+                fight_message = await callback.message.answer(
+                    f"⚔️ <code>Схватка {step} из 10</code>\n\n"
+                    f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+                    f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
+                    f"Выбери защиту:",
+                    parse_mode="HTML",
+                    reply_markup=get_fight_keyboard()
+                )
+                await state.update_data(last_fight_message_id=fight_message.message_id)
+        finally:
+            await state.update_data(is_processing=False)
         await callback.answer()
 
     @dp.callback_query(F.data == "hint")
     async def show_hint(callback: CallbackQuery, state: FSMContext):
         fight_data = await state.get_data()
-        fight_type = fight_data.get("fight_type", "simple")
-        step = fight_data.get("step", 1)
-        stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
-        last_fight_message_id = fight_data.get("last_fight_message_id")
-        if fight_type != "simple":
-            await callback.message.edit_text("Подсказки недоступны в этом режиме!")
+        fight_id = fight_data.get("fight_id", "unknown")
+        if fight_data.get("is_processing"):
+            logger.info(f"Fight {fight_id}: Ignored duplicate hint callback from user {callback.from_user.id}")
             await callback.answer()
             return
-        stats["hints"] += 1
-        await state.update_data(stats=stats)
-        sequence = fight_data.get("fight_sequence", MOVES)
-        control, attack = sequence[step-1]
-        correct_defenses = [
-            d for d, v in DEFENSE_MOVES.items()
-            if control in v.get("control_defense", []) and attack in v.get("attack_defense", [])
-        ]
-        await callback.message.edit_text(
-            f"⚔️ <code>Схватка {step} из 10</code>\n\n"
-            f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
-            f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
-            f"💡 <i>Подсказка</i>: <b>{', '.join(correct_defenses) or 'нет защиты'}</b>\n\n"
-            f"Выбери защиту:",
-            parse_mode="HTML",
-            reply_markup=get_fight_keyboard()
-        )
-        if last_fight_message_id:
-            await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id)
+        await state.update_data(is_processing=True)
+        try:
+            fight_type = fight_data.get("fight_type", "simple")
+            step = fight_data.get("step", 1)
+            stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
+            last_fight_message_id = fight_data.get("last_fight_message_id")
+            if fight_type != "simple":
+                await callback.message.edit_text("Подсказки недоступны в этом режиме!")
+                await callback.answer()
+                return
+            stats["hints"] += 1
+            await state.update_data(stats=stats)
+            sequence = fight_data.get("fight_sequence", MOVES)
+            control, attack = sequence[step-1]
+            correct_defenses = [
+                d for d, v in DEFENSE_MOVES.items()
+                if control in v.get("control_defense", []) and attack in v.get("attack_defense", [])
+            ]
+            await callback.message.edit_text(
+                f"⚔️ <code>Схватка {step} из 10</code>\n\n"
+                f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+                f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
+                f"💡 <i>Подсказка</i>: <b>{', '.join(correct_defenses) or 'нет защиты'}</b>\n\n"
+                f"Выбери защиту:",
+                parse_mode="HTML",
+                reply_markup=get_fight_keyboard()
+            )
+            if last_fight_message_id:
+                if not await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id):
+                    await callback.message.answer("Ошибка: не удалось очистить клавиатуру.", reply_markup=get_main_menu())
+                    await state.clear()
+                    await callback.answer()
+                    return
+        finally:
+            await state.update_data(is_processing=False)
         await callback.answer()
 
     @dp.callback_query(F.data == "show_profile")
     async def show_profile(callback: CallbackQuery, state: FSMContext):
-        await callback.message.edit_text(
-            "📊 Загружаю профиль...",
-            parse_mode="HTML"
-        )
+        await callback.message.edit_text("📊 Загружаю профиль...", parse_mode="HTML")
         conn = None
         try:
             conn = get_db_connection()
@@ -571,12 +554,8 @@ def setup_handlers(dp: Dispatcher):
                 name, life, strength, agility, spirit, belt = result
                 await callback.message.edit_text(
                     f"📊 <b>Твой профиль</b>\n"
-                    f"Имя: <b>{name}</b>\n"
-                    f"Жизнь: <b>{life}</b> ❤️\n"
-                    f"Сила: <b>{strength}</b> 💪\n"
-                    f"Ловкость: <b>{agility}</b> 🌀\n"
-                    f"Дух: <b>{spirit}</b> ✨\n"
-                    f"Пояс: <b>{belt}</b> 🟡",
+                    f"Имя: <b>{name}</b>\nЖизнь: <b>{life}</b> ❤️\nСила: <b>{strength}</b> 💪\n"
+                    f"Ловкость: <b>{agility}</b> 🌀\nДух: <b>{spirit}</b> ✨\nПояс: <b>{belt}</b> 🟡",
                     parse_mode="HTML",
                     reply_markup=get_profile_menu()
                 )
