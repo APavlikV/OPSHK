@@ -1,12 +1,13 @@
 import logging
 import random
+import asyncio
 from aiogram import Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from .keyboards import get_nickname_keyboard
 from .texts import (
-    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES,
+    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES, TIMED_FIGHT_START_PHRASES, TIMED_FIGHT_END_PHRASES, TIMED_FIGHT_TIMEOUT_PHRASE,
     CONTROL_SUCCESS_PHRASES, CONTROL_FAIL_PHRASES,
     ATTACK_SUCCESS_PHRASES, ATTACK_FAIL_PHRASES,
     DEFENSE_CONTROL_SUCCESS_PHRASES, DEFENSE_CONTROL_FAIL_PHRASES,
@@ -24,14 +25,14 @@ def get_start_button() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Старт", callback_data="start_button")]
     ])
 
-def get_fight_keyboard(show_hint=False, control=None, attack=None) -> InlineKeyboardMarkup:
+def get_fight_keyboard(is_timed=False) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="Гедан барай", callback_data="defense_Гедан барай")],
         [InlineKeyboardButton(text="Аге уке", callback_data="defense_Аге уке")],
         [InlineKeyboardButton(text="Сото уке", callback_data="defense_Сото уке")],
         [InlineKeyboardButton(text="Учи уке", callback_data="defense_Учи уке")],
     ]
-    if not show_hint:
+    if not is_timed:
         buttons.append([InlineKeyboardButton(text="💡 Подсказка", callback_data="hint")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -67,6 +68,46 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
     if exclude:
         buttons = [b for b in buttons if b[0].text != exclude]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int):
+    await asyncio.sleep(5)
+    user_data = await context.get_data()
+    if user_data.get("fight_type") == "timed" and user_data.get("step") == step and user_data.get("is_fighting"):
+        await context.update_data(is_fighting=False)
+        stats = user_data.get("stats", {"wins": 0, "partial": 0, "losses": 0})
+        score = user_data.get("score", 0)
+        stats["losses"] += 1
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT fighter_name FROM users_dev WHERE user_id = %s",
+            (user_id,)
+        )
+        user_nick = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        save_fight(user_id, "timed", score)
+        await message.answer(
+            TIMED_FIGHT_TIMEOUT_PHRASE,
+            parse_mode="HTML"
+        )
+        end_phrase = random.choice(TIMED_FIGHT_END_PHRASES)
+        await message.answer(
+            f"🏆 <b>Бой на время завершён!</b>\n"
+            f"🥋 {end_phrase}\n"
+            f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
+            parse_mode="HTML"
+        )
+        await message.answer(
+            f"<code>Статистика боя</code>\n\n"
+            f"<i>Схваток</i>: <b>{step}</b>\n"
+            f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+            f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+            f"<i>Поражение</i>: <b>{stats['losses']}</b>",
+            parse_mode="HTML",
+            reply_markup=get_main_menu()
+        )
+        await context.clear()
 
 def setup_handlers(dp: Dispatcher):
     @dp.message(Command("start"))
@@ -174,9 +215,7 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data == "fight_menu")
     async def fight_menu(callback: CallbackQuery, state: FSMContext):
-        # Удаляем клавиатуру у предыдущего сообщения (статистики)
         await callback.message.edit_reply_markup(reply_markup=None)
-        # Отправляем новое сообщение
         await callback.message.answer(
             "Выберите режим боя:",
             reply_markup=get_fight_modes_menu()
@@ -210,13 +249,33 @@ def setup_handlers(dp: Dispatcher):
         await callback.answer()
 
     @dp.callback_query(F.data == "timed_fight")
-    async def timed_fight(callback: CallbackQuery):
-        await callback.message.edit_text(
-            "Бой на время пока в разработке! Скоро будет доступен.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Назад", callback_data="fight_menu")]
-            ])
+    async def timed_fight(callback: CallbackQuery, state: FSMContext):
+        user_id = callback.from_user.id
+        await state.update_data(
+            fight_type="timed",
+            is_fighting=True,
+            user_id=user_id,
+            step=1,
+            score=0,
+            stats={"wins": 0, "partial": 0, "losses": 0}
         )
+        start_phrase = random.choice(TIMED_FIGHT_START_PHRASES)
+        await callback.message.edit_text(
+            f"<b>Бой на время начался!</b>\n"
+            f"🥋 {start_phrase}",
+            parse_mode="HTML"
+        )
+        control, attack = random.choice(MOVES)
+        await state.update_data(current_move=(control, attack))
+        await callback.message.answer(
+            f"⚔️ <code>Схватка 1</code>\n\n"
+            f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+            f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
+            f"Выбери защиту (5 сек):",
+            parse_mode="HTML",
+            reply_markup=get_fight_keyboard(is_timed=True)
+        )
+        asyncio.create_task(timed_fight_timer(state, callback.message, user_id, 1))
         await callback.answer()
 
     @dp.callback_query(F.data == "pvp_bot")
@@ -259,6 +318,7 @@ def setup_handlers(dp: Dispatcher):
     async def start_simple_fight(callback: CallbackQuery, state: FSMContext):
         await state.update_data(
             fight_sequence=random.sample(MOVES, 10),
+            fight_type="simple",
             step=1,
             score=0,
             stats={"wins": 0, "partial": 0, "losses": 0, "hints": 0}
@@ -285,11 +345,22 @@ def setup_handlers(dp: Dispatcher):
     async def process_defense(callback: CallbackQuery, state: FSMContext):
         defense = callback.data.replace("defense_", "")
         fight_data = await state.get_data()
+        fight_type = fight_data.get("fight_type", "simple")
         step = fight_data.get("step", 1)
         score = fight_data.get("score", 0)
         stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
-        sequence = fight_data.get("fight_sequence", MOVES)
-        control, attack = sequence[step-1]
+        is_fighting = fight_data.get("is_fighting", True)
+
+        if not is_fighting:
+            await callback.message.edit_text("Бой завершён!")
+            await callback.answer()
+            return
+
+        if fight_type == "simple":
+            sequence = fight_data.get("fight_sequence", MOVES)
+            control, attack = sequence[step-1]
+        else:
+            control, attack = fight_data.get("current_move", random.choice(MOVES))
 
         points, result, correct_defenses, log = await check_defense(control, attack, defense)
         score += points
@@ -310,29 +381,24 @@ def setup_handlers(dp: Dispatcher):
         cursor.close()
         conn.close()
 
-        # Логика логов
         bot_nick = "Бот Вася"
         control_success = control in DEFENSE_MOVES.get(defense, {}).get("control_defense", [])
         attack_success = attack in DEFENSE_MOVES.get(defense, {}).get("attack_defense", [])
 
-        # Контроль
         target_map = {"ДЗ": "голову", "ТР": "грудь", "СС": "живот"}
         control_phrase = random.choice(
             CONTROL_FAIL_PHRASES[control] if control_success else CONTROL_SUCCESS_PHRASES[control]
         ).format(nick=bot_nick, target=target_map.get(control, control))
 
-        # Защита контроля
         defense_control_phrase = random.choice(
             DEFENSE_CONTROL_SUCCESS_PHRASES[control] if control_success else DEFENSE_CONTROL_FAIL_PHRASES[control]
         ).format(nick=user_nick, target=target_map.get(control, control))
 
-        # Атака
         attack_target_map = {"ДЗ": "лоб", "ТР": "грудь", "СС": "живот", "ГДН": "ноги"}
         attack_phrase = random.choice(
             ATTACK_FAIL_PHRASES[attack] if attack_success else ATTACK_SUCCESS_PHRASES[attack]
         ).format(nick=bot_nick, target=attack_target_map.get(attack, attack))
 
-        # Защита атаки
         defense_attack_phrase = random.choice(
             DEFENSE_ATTACK_SUCCESS_PHRASES[attack] if attack_success else DEFENSE_ATTACK_FAIL_PHRASES[attack]
         ).format(nick=user_nick, target=attack_target_map.get(attack, attack))
@@ -345,7 +411,7 @@ def setup_handlers(dp: Dispatcher):
         ).strip()
 
         await callback.message.edit_text(
-            f"⚔️ <code>Схватка {step} из 10</code>\n\n"
+            f"⚔️ <code>Схватка {step}</code>\n\n"
             f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
             f"💥 <i>Атака</i>: <b>{attack}</b>\n"
             f"🛡️ <i>Защита</i>: <b>{defense}</b>\n\n"
@@ -354,7 +420,7 @@ def setup_handlers(dp: Dispatcher):
         )
         await callback.message.answer(log_message, parse_mode="HTML")
 
-        if step >= 10:
+        if fight_type == "simple" and step >= 10:
             user_id = callback.from_user.id
             save_fight(user_id, "simple", score)
             await callback.message.answer(
@@ -363,7 +429,7 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML"
             )
             draw_phrase = random.choice(DRAW_PHRASES) if score == 0 else ""
-            stats_message = await callback.message.answer(
+            await callback.message.answer(
                 f"<code>Статистика боя</code>\n\n"
                 f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
                 f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
@@ -374,11 +440,26 @@ def setup_handlers(dp: Dispatcher):
                 reply_markup=get_main_menu()
             )
             await state.clear()
-        else:
-            await state.update_data(step=step+1, score=score, stats=stats)
-            control, attack = sequence[step]
+        elif fight_type == "timed":
+            step += 1
+            await state.update_data(step=step, score=score, stats=stats, is_fighting=True)
+            control, attack = random.choice(MOVES)
+            await state.update_data(current_move=(control, attack))
             await callback.message.answer(
-                f"⚔️ <code>Схватка {step+1} из 10</code>\n\n"
+                f"⚔️ <code>Схватка {step}</code>\n\n"
+                f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
+                f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
+                f"Выбери защиту (5 сек):",
+                parse_mode="HTML",
+                reply_markup=get_fight_keyboard(is_timed=True)
+            )
+            asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step))
+        else:
+            step += 1
+            await state.update_data(step=step, score=score, stats=stats)
+            control, attack = fight_data["fight_sequence"][step-1]
+            await callback.message.answer(
+                f"⚔️ <code>Схватка {step} из 10</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
                 f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
                 f"Выбери защиту:",
@@ -391,11 +472,16 @@ def setup_handlers(dp: Dispatcher):
     @dp.callback_query(F.data == "hint")
     async def show_hint(callback: CallbackQuery, state: FSMContext):
         fight_data = await state.get_data()
+        fight_type = fight_data.get("fight_type", "simple")
         step = fight_data.get("step", 1)
-        sequence = fight_data.get("fight_sequence", MOVES)
         stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
+        if fight_type != "simple":
+            await callback.message.edit_text("Подсказки недоступны в этом режиме!")
+            await callback.answer()
+            return
         stats["hints"] += 1
         await state.update_data(stats=stats)
+        sequence = fight_data.get("fight_sequence", MOVES)
         control, attack = sequence[step-1]
         correct_defenses = [
             d for d, v in DEFENSE_MOVES.items()
@@ -408,15 +494,13 @@ def setup_handlers(dp: Dispatcher):
             f"💡 <i>Подсказка</i>: <b>{', '.join(correct_defenses) or 'нет защиты'}</b>\n\n"
             f"Выбери защиту:",
             parse_mode="HTML",
-            reply_markup=get_fight_keyboard(show_hint=True, control=control, attack=attack)
+            reply_markup=get_fight_keyboard()
         )
         await callback.answer()
 
     @dp.callback_query(F.data == "show_profile")
     async def show_profile(callback: CallbackQuery, state: FSMContext):
-        # Удаляем клавиатуру у предыдущего сообщения (статистики)
         await callback.message.edit_reply_markup(reply_markup=None)
-        # Отправляем новое сообщение
         conn = None
         try:
             conn = get_db_connection()
