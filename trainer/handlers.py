@@ -271,7 +271,8 @@ def setup_handlers(dp: Dispatcher):
             step=1,
             score=0,
             stats={"wins": 0, "partial": 0, "losses": 0},
-            fight_sequence=random.sample(MOVES, 10)
+            fight_sequence=random.sample(MOVES, 10),
+            last_fight_message_id=None
         )
         start_phrase = random.choice(TIMED_FIGHT_START_PHRASES)
         await callback.message.edit_text(
@@ -290,6 +291,7 @@ def setup_handlers(dp: Dispatcher):
             parse_mode="HTML",
             reply_markup=get_fight_keyboard(is_timed=True)
         )
+        await state.update_data(last_fight_message_id=fight_message.message_id)
         asyncio.create_task(timed_fight_timer(state, callback.message, user_id, 1, fight_message))
         await callback.answer()
 
@@ -346,7 +348,7 @@ def setup_handlers(dp: Dispatcher):
             f"🥋 {start_phrase}",
             parse_mode="HTML"
         )
-        await callback.message.answer(
+        fight_message = await callback.message.answer(
             f"⚔️ <code>Схватка 1 из 10</code>\n\n"
             f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
             f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
@@ -354,6 +356,7 @@ def setup_handlers(dp: Dispatcher):
             parse_mode="HTML",
             reply_markup=get_fight_keyboard()
         )
+        await state.update_data(last_fight_message_id=fight_message.message_id)
         await callback.answer()
 
     @dp.callback_query(F.data.startswith("defense_"))
@@ -365,6 +368,7 @@ def setup_handlers(dp: Dispatcher):
         score = fight_data.get("score", 0)
         stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
         is_fighting = fight_data.get("is_fighting", True)
+        last_fight_message_id = fight_data.get("last_fight_message_id")
 
         if not is_fighting:
             await callback.message.edit_text("Бой завершён!")
@@ -432,6 +436,17 @@ def setup_handlers(dp: Dispatcher):
         )
         await callback.message.answer(log_message, parse_mode="HTML")
 
+        # Очистка клавиатуры предыдущей схватки
+        if last_fight_message_id:
+            try:
+                await callback.message.bot.edit_message_reply_markup(
+                    chat_id=callback.message.chat.id,
+                    message_id=last_fight_message_id,
+                    reply_markup=None
+                )
+            except Exception as e:
+                logger.warning(f"Failed to clear keyboard for message {last_fight_message_id}: {e}")
+
         if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
             user_id = callback.from_user.id
             save_fight(user_id, fight_type, score)
@@ -477,12 +492,13 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML",
                 reply_markup=get_fight_keyboard(is_timed=True)
             )
+            await state.update_data(last_fight_message_id=fight_message.message_id)
             asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step, fight_message))
         else:
             step += 1
             await state.update_data(step=step, score=score, stats=stats)
             control, attack = sequence[step-1]
-            await callback.message.answer(
+            fight_message = await callback.message.answer(
                 f"⚔️ <code>Схватка {step} из 10</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
                 f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
@@ -490,6 +506,7 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML",
                 reply_markup=get_fight_keyboard()
             )
+            await state.update_data(last_fight_message_id=fight_message.message_id)
 
         await callback.answer()
 
@@ -499,6 +516,7 @@ def setup_handlers(dp: Dispatcher):
         fight_type = fight_data.get("fight_type", "simple")
         step = fight_data.get("step", 1)
         stats = fight_data.get("stats", {"wins": 0, "partial": 0, "losses": 0, "hints": 0})
+        last_fight_message_id = fight_data.get("last_fight_message_id")
         if fight_type != "simple":
             await callback.message.edit_text("Подсказки недоступны в этом режиме!")
             await callback.answer()
@@ -520,6 +538,15 @@ def setup_handlers(dp: Dispatcher):
             parse_mode="HTML",
             reply_markup=get_fight_keyboard()
         )
+        if last_fight_message_id:
+            try:
+                await callback.message.bot.edit_message_reply_markup(
+                    chat_id=callback.message.chat.id,
+                    message_id=last_fight_message_id,
+                    reply_markup=None
+                )
+            except Exception as e:
+                logger.warning(f"Failed to clear keyboard for message {last_fight_message_id}: {e}")
         await callback.answer()
 
     @dp.callback_query(F.data == "show_profile")
