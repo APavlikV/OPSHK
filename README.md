@@ -1,5 +1,10 @@
-## Деплой
+# OPSHK Karate Bot
 
-1. Убедитесь, что `pip` обновлён до последней версии:
+Telegram-бот для тренировки каратэ, включающий 4 режима боя: простой бой, бой на время, PvP с ботом и PvP-арена.
+
+## Установка
+
+1. Клонируйте репозиторий:
    ```bash
-   pip install --upgrade pip
+   git clone https://github.com/APavlikV/OPSHK.git
+   cd OPSHK
