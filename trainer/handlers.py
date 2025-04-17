@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from .keyboards import get_nickname_keyboard
 from .texts import (
-    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES, TIMED_FIGHT_START_PHRASES, TIMED_FIGHT_END_PHRASES, TIMED_FIGHT_TIMEOUT_PHRASE,
+    RULES_TEXT, TIPS_TEXT, START_FIGHT_PHRASES, TIMED_FIGHT_START_PHRASES, TIMED_FIGHT_END_PHRASES, TIMED_FIGHT_TIMEOUT_PHRASE, TIMED_FIGHT_TICK_PHRASES,
     CONTROL_SUCCESS_PHRASES, CONTROL_FAIL_PHRASES,
     ATTACK_SUCCESS_PHRASES, ATTACK_FAIL_PHRASES,
     DEFENSE_CONTROL_SUCCESS_PHRASES, DEFENSE_CONTROL_FAIL_PHRASES,
@@ -69,8 +69,21 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
         buttons = [b for b in buttons if b[0].text != exclude]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int):
-    await asyncio.sleep(5)
+async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int, fight_message: Message):
+    for seconds in range(4, -1, -1):
+        user_data = await context.get_data()
+        if user_data.get("fight_type") != "timed" or user_data.get("step") != step or not user_data.get("is_fighting"):
+            return
+        tick_phrase = random.choice(TIMED_FIGHT_TICK_PHRASES).format(seconds=seconds)
+        await fight_message.edit_text(
+            f"⚔️ <code>Схватка {step}</code>\n\n"
+            f"🎯 <i>Контроль</i>: <b>{user_data['current_move'][0]}</b>\n"
+            f"💥 <i>Атака</i>: <b>{user_data['current_move'][1]}</b>\n\n"
+            f"Выбери защиту ({seconds} сек):\n{tick_phrase}",
+            parse_mode="HTML",
+            reply_markup=get_fight_keyboard(is_timed=True)
+        )
+        await asyncio.sleep(1)
     user_data = await context.get_data()
     if user_data.get("fight_type") == "timed" and user_data.get("step") == step and user_data.get("is_fighting"):
         await context.update_data(is_fighting=False)
@@ -87,6 +100,7 @@ async def timed_fight_timer(context: FSMContext, message: Message, user_id: int,
         cursor.close()
         conn.close()
         save_fight(user_id, "timed", score)
+        await fight_message.edit_reply_markup(reply_markup=None)
         await message.answer(
             TIMED_FIGHT_TIMEOUT_PHRASE,
             parse_mode="HTML"
@@ -215,8 +229,7 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data == "fight_menu")
     async def fight_menu(callback: CallbackQuery, state: FSMContext):
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer(
+        await callback.message.edit_text(
             "Выберите режим боя:",
             reply_markup=get_fight_modes_menu()
         )
@@ -257,7 +270,8 @@ def setup_handlers(dp: Dispatcher):
             user_id=user_id,
             step=1,
             score=0,
-            stats={"wins": 0, "partial": 0, "losses": 0}
+            stats={"wins": 0, "partial": 0, "losses": 0},
+            fight_sequence=random.sample(MOVES, 10)
         )
         start_phrase = random.choice(TIMED_FIGHT_START_PHRASES)
         await callback.message.edit_text(
@@ -265,9 +279,10 @@ def setup_handlers(dp: Dispatcher):
             f"🥋 {start_phrase}",
             parse_mode="HTML"
         )
-        control, attack = random.choice(MOVES)
+        fight_data = await state.get_data()
+        control, attack = fight_data["fight_sequence"][0]
         await state.update_data(current_move=(control, attack))
-        await callback.message.answer(
+        fight_message = await callback.message.answer(
             f"⚔️ <code>Схватка 1</code>\n\n"
             f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
             f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
@@ -275,7 +290,7 @@ def setup_handlers(dp: Dispatcher):
             parse_mode="HTML",
             reply_markup=get_fight_keyboard(is_timed=True)
         )
-        asyncio.create_task(timed_fight_timer(state, callback.message, user_id, 1))
+        asyncio.create_task(timed_fight_timer(state, callback.message, user_id, 1, fight_message))
         await callback.answer()
 
     @dp.callback_query(F.data == "pvp_bot")
@@ -356,11 +371,8 @@ def setup_handlers(dp: Dispatcher):
             await callback.answer()
             return
 
-        if fight_type == "simple":
-            sequence = fight_data.get("fight_sequence", MOVES)
-            control, attack = sequence[step-1]
-        else:
-            control, attack = fight_data.get("current_move", random.choice(MOVES))
+        sequence = fight_data.get("fight_sequence", MOVES)
+        control, attack = sequence[step-1]
 
         points, result, correct_defenses, log = await check_defense(control, attack, defense)
         score += points
@@ -420,32 +432,44 @@ def setup_handlers(dp: Dispatcher):
         )
         await callback.message.answer(log_message, parse_mode="HTML")
 
-        if fight_type == "simple" and step >= 10:
+        if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
             user_id = callback.from_user.id
-            save_fight(user_id, "simple", score)
+            save_fight(user_id, fight_type, score)
             await callback.message.answer(
                 f"🏆 <b>Бой завершён!</b>\n\n"
                 f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
                 parse_mode="HTML"
             )
             draw_phrase = random.choice(DRAW_PHRASES) if score == 0 else ""
-            await callback.message.answer(
-                f"<code>Статистика боя</code>\n\n"
-                f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
-                f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
-                f"<i>Поражение</i>: <b>{stats['losses']}</b>\n"
-                f"<i>Подсказок</i>: <b>{stats['hints']}</b>\n\n"
-                f"{draw_phrase}",
-                parse_mode="HTML",
-                reply_markup=get_main_menu()
-            )
+            if fight_type == "simple":
+                await callback.message.answer(
+                    f"<code>Статистика боя</code>\n\n"
+                    f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+                    f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+                    f"<i>Поражение</i>: <b>{stats['losses']}</b>\n"
+                    f"<i>Подсказок</i>: <b>{stats['hints']}</b>\n\n"
+                    f"{draw_phrase}",
+                    parse_mode="HTML",
+                    reply_markup=get_main_menu()
+                )
+            else:
+                await callback.message.answer(
+                    f"<code>Статистика боя</code>\n\n"
+                    f"<i>Схваток</i>: <b>{step}</b>\n"
+                    f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+                    f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+                    f"<i>Поражение</i>: <b>{stats['losses']}</b>\n\n"
+                    f"{draw_phrase}",
+                    parse_mode="HTML",
+                    reply_markup=get_main_menu()
+                )
             await state.clear()
         elif fight_type == "timed":
             step += 1
             await state.update_data(step=step, score=score, stats=stats, is_fighting=True)
-            control, attack = random.choice(MOVES)
+            control, attack = sequence[step-1]
             await state.update_data(current_move=(control, attack))
-            await callback.message.answer(
+            fight_message = await callback.message.answer(
                 f"⚔️ <code>Схватка {step}</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
                 f"💥 <i>Атака</i>: <b>{attack}</b>\n\n"
@@ -453,11 +477,11 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML",
                 reply_markup=get_fight_keyboard(is_timed=True)
             )
-            asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step))
+            asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step, fight_message))
         else:
             step += 1
             await state.update_data(step=step, score=score, stats=stats)
-            control, attack = fight_data["fight_sequence"][step-1]
+            control, attack = sequence[step-1]
             await callback.message.answer(
                 f"⚔️ <code>Схватка {step} из 10</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
@@ -500,7 +524,10 @@ def setup_handlers(dp: Dispatcher):
 
     @dp.callback_query(F.data == "show_profile")
     async def show_profile(callback: CallbackQuery, state: FSMContext):
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.edit_text(
+            "📊 Загружаю профиль...",
+            parse_mode="HTML"
+        )
         conn = None
         try:
             conn = get_db_connection()
@@ -514,7 +541,7 @@ def setup_handlers(dp: Dispatcher):
             result = cursor.fetchone()
             if result:
                 name, life, strength, agility, spirit, belt = result
-                await callback.message.answer(
+                await callback.message.edit_text(
                     f"📊 <b>Твой профиль</b>\n"
                     f"Имя: <b>{name}</b>\n"
                     f"Жизнь: <b>{life}</b> ❤️\n"
@@ -526,10 +553,10 @@ def setup_handlers(dp: Dispatcher):
                     reply_markup=get_profile_menu()
                 )
             else:
-                await callback.message.answer("Профиль не найден!")
+                await callback.message.edit_text("Профиль не найден!")
         except Exception as e:
             logger.error(f"Profile fetch failed: {e}")
-            await callback.message.answer(f"Ошибка: {e}")
+            await callback.message.edit_text(f"Ошибка: {e}")
         finally:
             if conn:
                 cursor.close()
