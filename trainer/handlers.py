@@ -414,15 +414,17 @@ def setup_handlers(dp: Dispatcher):
             if last_fight_message_id:
                 await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
 
+            # Объединяем результат и лог в одно сообщение с разделителем и подзаголовком
             await callback.message.edit_text(
                 f"⚔️ <code>Схватка {step}</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
                 f"💥 <i>Атака</i>: <b>{attack}</b>\n"
                 f"🛡️ <i>Защита</i>: <b>{defense}</b>\n\n"
-                f"<i>Результат</i>: <b>{result}</b> (<b>+{points} баллов</b>)",
+                f"<i>Результат</i>: <b>{result}</b> (<b>+{points} баллов</b>)\n\n"
+                f"---\n"
+                f"📜 <b>Лог схватки</b>:\n{log_message}",
                 parse_mode="HTML"
             )
-            await callback.message.answer(log_message, parse_mode="HTML")
 
             if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
                 user_id = callback.from_user.id
