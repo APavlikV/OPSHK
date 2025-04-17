@@ -21,14 +21,14 @@ logger = logging.getLogger(__name__)
 def get_start_button() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Старт", callback_data="start_button")]])
 
-def get_fight_keyboard(is_timed=False) -> InlineKeyboardMarkup:
+def get_fight_keyboard(is_timed=False, show_hint=True) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="Гедан барай", callback_data="defense_Гедан барай")],
         [InlineKeyboardButton(text="Аге уке", callback_data="defense_Аге уке")],
         [InlineKeyboardButton(text="Сото уке", callback_data="defense_Сото уке")],
         [InlineKeyboardButton(text="Учи уке", callback_data="defense_Учи уке")],
     ]
-    if not is_timed:
+    if not is_timed and show_hint:
         buttons.append([InlineKeyboardButton(text="💡 Подсказка", callback_data="hint")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -320,6 +320,7 @@ def setup_handlers(dp: Dispatcher):
             stats={"wins": 0, "partial": 0, "losses": 0, "hints": 0},
             last_fight_message_id=None,
             is_processing=False,
+            hint_used=False,  # Инициализируем флаг для подсказки
             fight_id=fight_id
         )
         fight_data = await state.get_data()
@@ -475,7 +476,7 @@ def setup_handlers(dp: Dispatcher):
                 asyncio.create_task(timed_fight_timer(state, callback.message, callback.from_user.id, step, fight_message, fight_id))
             else:
                 step += 1
-                await state.update_data(step=step, score=score, stats=stats)
+                await state.update_data(step=step, score=score, stats=stats, hint_used=False)  # Сбрасываем флаг подсказки
                 control, attack = sequence[step-1]
                 fight_message = await callback.message.answer(
                     f"⚔️ <code>Схватка {step} из 10</code>\n\n"
@@ -508,7 +509,7 @@ def setup_handlers(dp: Dispatcher):
                 await callback.answer()
                 return
             stats["hints"] += 1
-            await state.update_data(stats=stats)
+            await state.update_data(stats=stats, hint_used=True)  # Устанавливаем флаг подсказки
             sequence = fight_data.get("fight_sequence", MOVES)
             control, attack = sequence[step-1]
             correct_defenses = [
@@ -524,7 +525,7 @@ def setup_handlers(dp: Dispatcher):
                 f"💡 <i>Подсказка</i>: <b>{', '.join(correct_defenses) or 'нет защиты'}</b>\n\n"
                 f"Выбери защиту:",
                 parse_mode="HTML",
-                reply_markup=get_fight_keyboard()
+                reply_markup=get_fight_keyboard(show_hint=False)  # Убираем кнопку подсказки
             )
         finally:
             await state.update_data(is_processing=False)
