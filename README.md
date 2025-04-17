@@ -8,3 +8,6 @@ Telegram-бот для тренировки каратэ, включающий 4
    ```bash
    git clone https://github.com/APavlikV/OPSHK.git
    cd OPSHK
+
+   pip install --upgrade pip
+   pip install -r requirements.txt
