@@ -69,6 +69,20 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
         buttons = [b for b in buttons if b[0].text != exclude]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+async def clear_keyboard(bot, chat_id, message_id):
+    for _ in range(2):  # Две попытки
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=None
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to clear keyboard for message {message_id}: {e}")
+            await asyncio.sleep(0.5)
+    return False
+
 async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int, fight_message: Message):
     for seconds in range(4, -1, -1):
         user_data = await context.get_data()
@@ -100,7 +114,7 @@ async def timed_fight_timer(context: FSMContext, message: Message, user_id: int,
         cursor.close()
         conn.close()
         save_fight(user_id, "timed", score)
-        await fight_message.edit_reply_markup(reply_markup=None)
+        await clear_keyboard(message.bot, message.chat.id, fight_message.message_id)
         await message.answer(
             TIMED_FIGHT_TIMEOUT_PHRASE,
             parse_mode="HTML"
@@ -338,7 +352,8 @@ def setup_handlers(dp: Dispatcher):
             fight_type="simple",
             step=1,
             score=0,
-            stats={"wins": 0, "partial": 0, "losses": 0, "hints": 0}
+            stats={"wins": 0, "partial": 0, "losses": 0, "hints": 0},
+            last_fight_message_id=None
         )
         fight_data = await state.get_data()
         control, attack = fight_data["fight_sequence"][0]
@@ -436,16 +451,9 @@ def setup_handlers(dp: Dispatcher):
         )
         await callback.message.answer(log_message, parse_mode="HTML")
 
-        # Очистка клавиатуры предыдущей схватки
+        # Очистка клавиатуры текущей схватки
         if last_fight_message_id:
-            try:
-                await callback.message.bot.edit_message_reply_markup(
-                    chat_id=callback.message.chat.id,
-                    message_id=last_fight_message_id,
-                    reply_markup=None
-                )
-            except Exception as e:
-                logger.warning(f"Failed to clear keyboard for message {last_fight_message_id}: {e}")
+            await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id)
 
         if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
             user_id = callback.from_user.id
@@ -539,14 +547,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_fight_keyboard()
         )
         if last_fight_message_id:
-            try:
-                await callback.message.bot.edit_message_reply_markup(
-                    chat_id=callback.message.chat.id,
-                    message_id=last_fight_message_id,
-                    reply_markup=None
-                )
-            except Exception as e:
-                logger.warning(f"Failed to clear keyboard for message {last_fight_message_id}: {e}")
+            await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id)
         await callback.answer()
 
     @dp.callback_query(F.data == "show_profile")
