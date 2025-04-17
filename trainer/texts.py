@@ -1,6 +1,7 @@
-```python
-# trainer/texts.py
+import logging
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 RULES_TEXT = (
     "📜 <b>Правила простого боя</b>\n\n"
