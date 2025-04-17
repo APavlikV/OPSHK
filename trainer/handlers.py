@@ -66,16 +66,17 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 async def clear_keyboard(bot, chat_id, message_id, fight_id):
-    for _ in range(3):
-        try:
-            await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
-            logger.info(f"Fight {fight_id}: Cleared keyboard for message {message_id}")
+    try:
+        message = await bot.get_chat(chat_id).get_message(message_id)
+        if message.reply_markup is None:
+            logger.debug(f"Fight {fight_id}: Keyboard already cleared for message {message_id}")
             return True
-        except Exception as e:
-            logger.warning(f"Fight {fight_id}: Failed to clear keyboard for message {message_id}: {e}")
-            await asyncio.sleep(0.3)
-    logger.error(f"Fight {fight_id}: Failed to clear keyboard for message {message_id} after retries")
-    return False
+        await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
+        logger.info(f"Fight {fight_id}: Cleared keyboard for message {message_id}")
+        return True
+    except Exception as e:
+        logger.warning(f"Fight {fight_id}: Failed to clear keyboard for message {message_id}: {e}")
+        return False
 
 async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int, fight_message: Message, fight_id: str):
     for seconds in range(4, -1, -1):
@@ -232,7 +233,9 @@ def setup_handlers(dp: Dispatcher):
         user_data = await state.get_data()
         stats_message_id = user_data.get("stats_message_id")
         if stats_message_id:
-            await clear_keyboard(callback.message.bot, callback.message.chat.id, stats_message_id, "menu")
+            success = await clear_keyboard(callback.message.bot, callback.message.chat.id, stats_message_id, "menu")
+            if not success:
+                logger.error(f"Failed to clear stats keyboard for message {stats_message_id}")
         await callback.message.answer("Выберите режим боя:", reply_markup=get_fight_modes_menu())
         await callback.answer()
 
@@ -309,7 +312,9 @@ def setup_handlers(dp: Dispatcher):
         user_data = await state.get_data()
         stats_message_id = user_data.get("stats_message_id")
         if stats_message_id:
-            await clear_keyboard(callback.message.bot, callback.message.chat.id, stats_message_id, "menu")
+            success = await clear_keyboard(callback.message.bot, callback.message.chat.id, stats_message_id, "menu")
+            if not success:
+                logger.error(f"Failed to clear stats keyboard for message {stats_message_id}")
         await callback.message.answer("Главное меню:", reply_markup=get_main_menu())
         await callback.answer()
 
@@ -318,7 +323,9 @@ def setup_handlers(dp: Dispatcher):
         user_data = await state.get_data()
         stats_message_id = user_data.get("stats_message_id")
         if stats_message_id:
-            await clear_keyboard(callback.message.bot, callback.message.chat.id, stats_message_id, "menu")
+            success = await clear_keyboard(callback.message.bot, callback.message.chat.id, stats_message_id, "menu")
+            if not success:
+                logger.error(f"Failed to clear stats keyboard for message {stats_message_id}")
         await callback.message.answer("Выберите режим боя:", reply_markup=get_fight_modes_menu())
         await callback.answer()
 
@@ -425,9 +432,11 @@ def setup_handlers(dp: Dispatcher):
             ).strip()
 
             if last_fight_message_id:
-                await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
+                success = await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
+                if not success:
+                    logger.error(f"Fight {fight_id}: Failed to clear fight keyboard for message {last_fight_message_id}")
 
-            await callback.message.edit_text(
+            fight_result_message = await callback.message.answer(
                 f"⚔️ <code>Схватка {step}</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
                 f"💥 <i>Атака</i>: <b>{attack}</b>\n"
@@ -437,6 +446,7 @@ def setup_handlers(dp: Dispatcher):
                 f"📜 <b>Лог схватки</b>:\n{log_message}",
                 parse_mode="HTML"
             )
+            await state.update_data(last_fight_message_id=fight_result_message.message_id)
 
             if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
                 user_id = callback.from_user.id
@@ -529,7 +539,9 @@ def setup_handlers(dp: Dispatcher):
                 if control in v.get("control_defense", []) and attack in v.get("attack_defense", [])
             ]
             if last_fight_message_id:
-                await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
+                success = await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
+                if not success:
+                    logger.error(f"Fight {fight_id}: Failed to clear hint keyboard for message {last_fight_message_id}")
             await callback.message.edit_text(
                 f"⚔️ <code>Схватка {step} из 10</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
