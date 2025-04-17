@@ -66,36 +66,40 @@ def get_simple_fight_menu(exclude=None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 async def clear_keyboard(bot, chat_id, message_id, fight_id):
-    for _ in range(2):
+    for _ in range(3):
         try:
             await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
             logger.info(f"Fight {fight_id}: Cleared keyboard for message {message_id}")
             return True
         except Exception as e:
             logger.warning(f"Fight {fight_id}: Failed to clear keyboard for message {message_id}: {e}")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
     logger.error(f"Fight {fight_id}: Failed to clear keyboard for message {message_id} after retries")
     return False
 
 async def timed_fight_timer(context: FSMContext, message: Message, user_id: int, step: int, fight_message: Message, fight_id: str):
     for seconds in range(4, -1, -1):
         user_data = await context.get_data()
-        if user_data.get("fight_type") != "timed" or user_data.get("step") != step or not user_data.get("is_fighting"):
+        if user_data.get("fight_type") != "timed" or user_data.get("step") != step or not user_data.get("is_fighting") or not user_data.get("timer_active"):
             logger.info(f"Fight {fight_id}: Timer stopped for step {step}")
             return
         tick_phrase = random.choice(TIMED_FIGHT_TICK_PHRASES).format(seconds=seconds)
-        await fight_message.edit_text(
-            f"⚔️ <code>Схватка {step}</code>\n\n"
-            f"🎯 <i>Контроль</i>: <b>{user_data['current_move'][0]}</b>\n"
-            f"💥 <i>Атака</i>: <b>{user_data['current_move'][1]}</b>\n\n"
-            f"Выбери защиту ({seconds} сек):\n{tick_phrase}",
-            parse_mode="HTML",
-            reply_markup=get_fight_keyboard(is_timed=True)
-        )
+        try:
+            await fight_message.edit_text(
+                f"⚔️ <code>Схватка {step}</code>\n\n"
+                f"🎯 <i>Контроль</i>: <b>{user_data['current_move'][0]}</b>\n"
+                f"💥 <i>Атака</i>: <b>{user_data['current_move'][1]}</b>\n\n"
+                f"Выбери защиту ({seconds} сек):\n{tick_phrase}",
+                parse_mode="HTML",
+                reply_markup=get_fight_keyboard(is_timed=True)
+            )
+            logger.debug(f"Fight {fight_id}: Updated timer for step {step}, seconds {seconds}")
+        except Exception as e:
+            logger.warning(f"Fight {fight_id}: Failed to update timer for step {step}: {e}")
         await asyncio.sleep(1)
     user_data = await context.get_data()
     if user_data.get("fight_type") == "timed" and user_data.get("step") == step and user_data.get("is_fighting"):
-        await context.update_data(is_fighting=False)
+        await context.update_data(is_fighting=False, timer_active=False)
         stats = user_data.get("stats", {"wins": 0, "partial": 0, "losses": 0})
         score = user_data.get("score", 0)
         stats["losses"] += 1
@@ -106,26 +110,24 @@ async def timed_fight_timer(context: FSMContext, message: Message, user_id: int,
         cursor.close()
         conn.close()
         save_fight(user_id, "timed", score)
-        if await clear_keyboard(message.bot, message.chat.id, fight_message.message_id, fight_id):
-            await message.answer(TIMED_FIGHT_TIMEOUT_PHRASE, parse_mode="HTML")
-            end_phrase = random.choice(TIMED_FIGHT_END_PHRASES)
-            await message.answer(
-                f"🏆 <b>Бой на время завершён!</b>\n"
-                f"🥋 {end_phrase}\n"
-                f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
-                parse_mode="HTML"
-            )
-            await message.answer(
-                f"<code>Статистика боя</code>\n\n"
-                f"<i>Схваток</i>: <b>{step}</b>\n"
-                f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
-                f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
-                f"<i>Поражение</i>: <b>{stats['losses']}</b>",
-                parse_mode="HTML",
-                reply_markup=get_main_menu()
-            )
-        else:
-            await message.answer("Ошибка: не удалось завершить бой корректно.", reply_markup=get_main_menu())
+        await clear_keyboard(message.bot, message.chat.id, fight_message.message_id, fight_id)
+        await message.answer(TIMED_FIGHT_TIMEOUT_PHRASE, parse_mode="HTML")
+        end_phrase = random.choice(TIMED_FIGHT_END_PHRASES)
+        await message.answer(
+            f"🏆 <b>Бой на время завершён!</b>\n"
+            f"🥋 {end_phrase}\n"
+            f"⭐ <b>{user_nick}</b> набрал <code>Баллы: {score}</code>",
+            parse_mode="HTML"
+        )
+        await message.answer(
+            f"<code>Статистика боя</code>\n\n"
+            f"<i>Схваток</i>: <b>{step}</b>\n"
+            f"<i>Чистая победа</i>: <b>{stats['wins']}</b>\n"
+            f"<i>Частичный успех</i>: <b>{stats['partial']}</b>\n"
+            f"<i>Поражение</i>: <b>{stats['losses']}</b>",
+            parse_mode="HTML",
+            reply_markup=get_main_menu()
+        )
         await context.clear()
 
 def setup_handlers(dp: Dispatcher):
@@ -252,6 +254,7 @@ def setup_handlers(dp: Dispatcher):
             fight_type="timed",
             is_fighting=True,
             is_processing=False,
+            timer_active=True,
             user_id=user_id,
             step=1,
             score=0,
@@ -343,9 +346,8 @@ def setup_handlers(dp: Dispatcher):
         fight_id = fight_data.get("fight_id", "unknown")
         if fight_data.get("is_processing"):
             logger.info(f"Fight {fight_id}: Ignored duplicate callback from user {callback.from_user.id}")
-            await callback.answer()
             return
-        await state.update_data(is_processing=True)
+        await state.update_data(is_processing=True, timer_active=False)
         try:
             defense = callback.data.replace("defense_", "")
             fight_type = fight_data.get("fight_type", "simple")
@@ -408,6 +410,10 @@ def setup_handlers(dp: Dispatcher):
                 f"🛡️ {defense_attack_phrase} {'✅' if attack_success else '❌'}"
             ).strip()
 
+            # Очистка клавиатуры перед отправкой результата и лога
+            if last_fight_message_id:
+                await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
+
             await callback.message.edit_text(
                 f"⚔️ <code>Схватка {step}</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
@@ -417,15 +423,6 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML"
             )
             await callback.message.answer(log_message, parse_mode="HTML")
-
-            # Очистка клавиатуры текущей схватки
-            if last_fight_message_id:
-                if not await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id):
-                    logger.error(f"Fight {fight_id}: Failed to proceed due to keyboard cleanup error")
-                    await callback.message.answer("Ошибка: не удалось очистить клавиатуру.", reply_markup=get_main_menu())
-                    await state.clear()
-                    await callback.answer()
-                    return
 
             if fight_type == "simple" and step >= 10 or fight_type == "timed" and step >= 10:
                 user_id = callback.from_user.id
@@ -461,7 +458,7 @@ def setup_handlers(dp: Dispatcher):
                 await state.clear()
             elif fight_type == "timed":
                 step += 1
-                await state.update_data(step=step, score=score, stats=stats, is_fighting=True)
+                await state.update_data(step=step, score=score, stats=stats, is_fighting=True, timer_active=True)
                 control, attack = sequence[step-1]
                 await state.update_data(current_move=(control, attack))
                 fight_message = await callback.message.answer(
@@ -497,7 +494,6 @@ def setup_handlers(dp: Dispatcher):
         fight_id = fight_data.get("fight_id", "unknown")
         if fight_data.get("is_processing"):
             logger.info(f"Fight {fight_id}: Ignored duplicate hint callback from user {callback.from_user.id}")
-            await callback.answer()
             return
         await state.update_data(is_processing=True)
         try:
@@ -517,6 +513,8 @@ def setup_handlers(dp: Dispatcher):
                 d for d, v in DEFENSE_MOVES.items()
                 if control in v.get("control_defense", []) and attack in v.get("attack_defense", [])
             ]
+            if last_fight_message_id:
+                await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id)
             await callback.message.edit_text(
                 f"⚔️ <code>Схватка {step} из 10</code>\n\n"
                 f"🎯 <i>Контроль</i>: <b>{control}</b>\n"
@@ -526,12 +524,6 @@ def setup_handlers(dp: Dispatcher):
                 parse_mode="HTML",
                 reply_markup=get_fight_keyboard()
             )
-            if last_fight_message_id:
-                if not await clear_keyboard(callback.message.bot, callback.message.chat.id, last_fight_message_id, fight_id):
-                    await callback.message.answer("Ошибка: не удалось очистить клавиатуру.", reply_markup=get_main_menu())
-                    await state.clear()
-                    await callback.answer()
-                    return
         finally:
             await state.update_data(is_processing=False)
         await callback.answer()
@@ -568,9 +560,4 @@ def setup_handlers(dp: Dispatcher):
             if conn:
                 cursor.close()
                 conn.close()
-        await callback.answer()
-
-    @dp.callback_query()
-    async def debug_callback(callback: CallbackQuery):
-        logger.info(f"Received callback: {callback.data} from {callback.from_user.id}")
         await callback.answer()
